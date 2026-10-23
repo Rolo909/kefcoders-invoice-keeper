@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .login-card .brand-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .login-card .brand-line b { font: 700 20px/1 var(--f-serif); }
+  .pw-wrap { position: relative; }
+  .pw-wrap .toggle { position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+  .note { background: var(--violet-soft); color: var(--ink); padding: 10px 12px; border-radius: var(--r); }
+</style>
+</head>
+<body>
+<main class="login-page" x-data="login">
+  <form class="login-card" @submit.prevent="submit()" novalidate aria-labelledby="lg-t">
+    <div class="brand-line"><b>Invoice Keeper</b><span class="stamp" aria-hidden="true" style="font-size:12px">Книга платежей</span></div>
+    <h1 id="lg-t">Вход</h1>
+    <p class="note" x-show="next" x-text="'Войдите, чтобы открыть раздел «' + next + '».'"></p>
+    <p class="note" x-show="st === 'loggedout'" role="status">Вы вышли из панели. До встречи.</p>
+    <p class="form-error" x-show="err" x-text="err" role="alert" id="lg-err"></p>
+
+    <div class="field"><label for="lg-login">Логин</label>
+      <input class="input mono" id="lg-login" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" x-ref="login" x-model="u" :aria-invalid="!!eU" aria-describedby="lg-u-e lg-err">
+      <span class="err" id="lg-u-e" x-text="eU"></span></div>
+    <div class="field"><label for="lg-pass">Пароль</label>
+      <div class="pw-wrap"><input class="input mono" id="lg-pass" name="password" :type="show ? 'text' : 'password'" autocomplete="current-password" x-model="p" :aria-invalid="!!eP" aria-describedby="lg-p-e lg-err" style="padding-right:150px">
+        <button class="btn sm quiet toggle" type="button" @click="show = !show" x-text="show ? 'Скрыть пароль' : 'Показать пароль'"></button></div>
+      <span class="err" id="lg-p-e" x-text="eP"></span></div>
+    <button class="btn primary" type="submit" :aria-disabled="busy" x-text="busy ? 'Входим…' : 'Войти'" style="min-height:44px"></button>
+    <p class="small muted">Нет учётной записи? Её создаёт администратор вашей команды.</p>
+  </form>
+</main>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  const q = new URLSearchParams(location.search);
+  const NEXT = { periods: 'Периоды', payments: 'Регулярные платежи', calendar: 'Календарь', summary: 'Итоги', users: 'Пользователи', journal: 'Журнал' };
+  Alpine.data('login', () => ({
+    u: q.get('state') === 'error' ? 'anna' : '', p: q.get('state') === 'error' ? 'anna1234' : '',
+    show: false, busy: false, eU: '', eP: '',
+    st: q.get('state'),
+    next: NEXT[q.get('next')] || '',
+    err: q.get('state') === 'error' ? 'Неверный логин или пароль. Проверьте раскладку клавиатуры и Caps Lock.'
+      : q.get('state') === 'locked' ? 'Слишком много попыток входа. Попробуйте снова через минуту.' : '',
+    init() { this.$nextTick(() => this.$refs.login.focus()); },
+    submit() {
+      this.eU = this.u.trim() ? '' : 'Введите логин.';
+      this.eP = this.p ? '' : 'Введите пароль.';
+      if (this.eU || this.eP) return document.getElementById(this.eU ? 'lg-login' : 'lg-pass').focus();
+      const ok = { admin: 'admin', anna: 'user', user: 'user', maria: 'user' }[this.u.trim().toLowerCase()];
+      if (!ok || this.p.length < 8) { this.err = 'Неверный логин или пароль. Проверьте раскладку клавиатуры и Caps Lock.'; this.p = ''; return; }
+      this.busy = true; this.err = '';
+      const target = { 'Периоды': 'periods.html' }[this.next] || 'index.html';
+      setTimeout(() => { location.href = target + '?role=' + ok; }, 350);
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

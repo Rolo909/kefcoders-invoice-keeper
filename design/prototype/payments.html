@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Регулярные платежи — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .ledger td.desc-cell { max-width: 420px; }
+  .tools { display: flex; gap: 22px; align-items: flex-end; flex-wrap: wrap; padding: 6px 0 16px; border-bottom: 1px solid var(--rule); }
+  .tools .field { min-width: 240px; }
+</style>
+</head>
+<body data-page="payments">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="payments" tabindex="-1">
+  <div class="page-head"><h1>Регулярные платежи</h1></div>
+  <p class="lead" x-html="lead"></p>
+
+  <div class="tools">
+    <div class="field"><label for="p-q">Поиск по названию</label><input class="input" id="p-q" type="search" placeholder="Сервер" x-model.debounce.200ms="q"></div>
+    <label class="check"><input type="checkbox" x-model="showStopped"><span x-text="'Показать прекращённые (' + stoppedCount + ')'"></span></label>
+  </div>
+
+  <template x-if="!list.length && !q">
+    <div class="empty">
+      <h2>Регулярных платежей пока нет</h2>
+      <p>Добавьте аренду, подписки и серверы — книга сама заведёт периоды и напомнит о сроках в Telegram за 3 дня.</p>
+      <button class="btn primary" type="button" x-show="$store.ik.isAdmin" @click="$store.dlg.open('newPayment', {}, $event)">Добавить первый платёж</button>
+      <p x-show="!$store.ik.isAdmin">Платежи добавляет администратор.</p>
+    </div>
+  </template>
+  <template x-if="!list.length && q">
+    <div class="empty"><h2 x-text="'Ничего не нашлось по «' + q + '»'"></h2><button class="btn" type="button" @click="q = ''">Очистить поиск</button></div>
+  </template>
+
+  <table class="ledger stack" x-show="list.length">
+    <caption class="sr-only">Регулярные платежи</caption>
+    <thead><tr>
+      <th scope="col">Платёж</th><th scope="col" class="r">Сумма</th><th scope="col">Периодичность</th>
+      <th scope="col">Ближайший срок</th><th scope="col">Состояние</th>
+      <th scope="col" x-show="$store.ik.isAdmin"><span class="sr-only">Действия</span></th>
+    </tr></thead>
+    <tbody>
+      <template x-for="p in list" :key="p.id">
+        <tr :class="p.deleted && 'stopped'">
+          <td class="desc-cell" data-k="name"><a class="name" :href="'payment.html?id=' + p.id" x-text="p.name"></a><span class="name-sub" x-text="p.desc"></span></td>
+          <td class="sum" data-k="sum" x-text="F.num(p.amount) + ' ' + F.sign(p.currency)"></td>
+          <td data-k="hide-sm" x-text="F.period(p.period)"></td>
+          <td class="date" data-k="date" x-text="next(p) ? F.date(next(p).due) : '—'"></td>
+          <td data-k="mark">
+            <template x-if="p.deleted"><span class="st stopped" x-text="'Прекращён ' + F.date(p.deleted)"></span></template>
+            <template x-if="!p.deleted && next(p)"><span class="st" :class="$store.ik.state(next(p))" x-text="$store.ik.statusLine(next(p))"></span></template>
+          </td>
+          <td class="acts" data-k="more" x-show="$store.ik.isAdmin">
+            <div class="row-menu" x-show="!p.deleted" x-data="{ open: false }" @keydown.escape.stop="if (open) { open = false; $refs.mb.focus() }" @click.outside="open = false">
+              <button class="btn sm quiet dots" x-ref="mb" type="button" :aria-expanded="open" @click="open = !open" :aria-label="'Действия с платежом ' + p.name">⋯</button>
+              <div class="row-menu-list" x-show="open" x-cloak x-transition.opacity>
+                <a :href="'payment.html?id=' + p.id" style="padding:9px 12px;text-decoration:none">Открыть платёж</a>
+                <button type="button" class="danger" @click="open = false; $store.dlg.open('stopPayment', { pid: p.id }, { currentTarget: $refs.mb })">Прекратить платёж</button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  <p class="small muted" style="margin-top:14px" x-show="list.length">Чтобы изменить сумму или срок, прекратите платёж и создайте новый. История оплат сохранится.</p>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  const st = new URLSearchParams(location.search).get('state');
+  Alpine.data('payments', () => ({
+    q: '',
+    showStopped: st === 'stopped',
+    next(p) {
+      const ik = this.$store.ik, all = ik.occurrences.filter((o) => o.pid === p.id).sort((a, b) => a.due.localeCompare(b.due));
+      return all.find((o) => !o.paid) || all.find((o) => o.due >= ik.today) || null;
+    },
+    get stoppedCount() { return this.$store.ik.payments.filter((p) => p.deleted).length; },
+    get list() {
+      if (st === 'empty') return [];
+      const q = this.q.trim().toLowerCase();
+      return this.$store.ik.payments
+        .filter((p) => (this.showStopped || !p.deleted) && (!q || p.name.toLowerCase().includes(q)))
+        .sort((a, b) => (!!a.deleted - !!b.deleted) || ((this.next(a) || { due: '9' }).due.localeCompare((this.next(b) || { due: '9' }).due)));
+    },
+    get lead() {
+      const ik = this.$store.ik, active = ik.payments.filter((p) => !p.deleted);
+      const month = ik.totals('2026-10-01', '2026-10-31').filter((t) => t.planned).map((t) => F.money(t.planned, t.currency)).join(' · ');
+      return 'Действует ' + active.length + ' ' + F.plural(active.length, 'платёж', 'платежа', 'платежей') + '. В октябре по плану: <span class="mono">' + month + '</span>.';
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

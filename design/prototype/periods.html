@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Периоды — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .filters { gap: 12px 18px; padding: 14px 0 14px; }
+  .filters .grp { display: grid; gap: 6px; align-content: start; }
+  .filters .grp > span, .filters .grp > label { font-size: 13px; color: var(--ink-2); }
+  .filters .ctl { min-height: 36px; display: flex; align-items: center; gap: 6px; }
+  .filters .input, .filters .select { min-height: 36px; padding-top: 4px; padding-bottom: 4px; font-size: 15px; }
+  .filters .w-date { width: 132px; }
+  .filters .w-pay { width: 170px; }
+  .filters .w-q { width: 150px; }
+  .filters .seg button, .filters .chip { min-height: 36px; }
+  .reset { align-self: end; margin-left: auto; }
+  .ledger td.mark-cell { width: 330px; }
+  .ledger .od { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .clip { display: inline-flex; gap: 4px; align-items: center; color: var(--ink-2); }
+  .soon-t { color: var(--amber); font-weight: 700; }
+</style>
+</head>
+<body data-page="periods">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="periods" tabindex="-1">
+  <div class="page-head">
+    <h1>Периоды</h1>
+    <p class="muted" role="status" x-text="F.plural(filtered.length, 'Найден', 'Найдено', 'Найдено') + ' ' + filtered.length + ' ' + F.plural(filtered.length, 'период', 'периода', 'периодов')"></p>
+  </div>
+
+  <button class="btn sm filters-toggle" type="button" :aria-expanded="showF" aria-controls="flt" @click="showF = !showF" x-text="'Фильтры' + (dirty ? ' · изменены' : '')"></button>
+  <form class="filters" id="flt" :class="showF && 'open'" @submit.prevent aria-label="Фильтры">
+    <div class="grp"><span id="f-st">Статус</span>
+      <div class="seg ctl" role="group" aria-labelledby="f-st" style="gap:0">
+        <button type="button" :aria-pressed="f.status === ''" @click="f.status = ''">Все</button>
+        <button type="button" :aria-pressed="f.status === 'unpaid'" @click="f.status = 'unpaid'">Не оплачено</button>
+        <button type="button" :aria-pressed="f.status === 'paid'" @click="f.status = 'paid'">Оплачено</button>
+      </div></div>
+    <div class="grp"><span id="f-cur">Валюта</span>
+      <div class="ctl" role="group" aria-labelledby="f-cur">
+        <template x-for="c in ['RUB', 'USD', 'EUR']" :key="c"><button type="button" class="chip" :aria-pressed="f.cur.includes(c)" @click="toggleCur(c)" x-text="c"></button></template>
+      </div></div>
+    <div class="grp"><span id="f-od">Просрочка</span>
+      <div class="ctl" role="group" aria-labelledby="f-od"><button type="button" class="chip" :aria-pressed="f.overdue" @click="f.overdue = !f.overdue">Только с просрочкой</button></div></div>
+    <div class="grp"><label for="f-from">Срок с</label><input class="input mono w-date" id="f-from" type="date" x-model="f.from"></div>
+    <div class="grp"><label for="f-to">по</label><input class="input mono w-date" id="f-to" type="date" x-model="f.to"></div>
+    <div class="grp"><label for="f-pay">Платёж</label>
+      <select class="select w-pay" id="f-pay" x-model="f.pid"><option value="">Все платежи</option>
+        <template x-for="p in $store.ik.payments" :key="p.id"><option :value="p.id" x-text="p.name + (p.deleted ? ' (прекращён)' : '')"></option></template></select></div>
+    <div class="grp"><label for="f-q">Поиск</label><input class="input w-q" id="f-q" type="search" placeholder="Аренда" x-model.debounce.200ms="f.q"></div>
+    <button class="btn sm quiet reset" type="button" x-show="dirty" @click="resetFilters()">Сбросить фильтры</button>
+  </form>
+
+  <template x-if="!filtered.length">
+    <div class="empty">
+      <h2>Нет периодов по этим фильтрам</h2>
+      <p x-text="'Сейчас выбрано: ' + summaryText + '.'"></p>
+      <button class="btn" type="button" @click="resetFilters()">Сбросить фильтры</button>
+    </div>
+  </template>
+
+  <template x-if="filtered.length">
+    <div>
+      <table class="ledger stack attn">
+        <caption class="sr-only">Периоды регулярных платежей</caption>
+        <thead><tr>
+          <th scope="col" :aria-sort="sort.by === 'due' ? (sort.dir > 0 ? 'ascending' : 'descending') : null"><button class="sort" type="button" @click="sortBy('due')">Срок <span aria-hidden="true" x-text="sort.by === 'due' ? (sort.dir > 0 ? '↑' : '↓') : '↕'" :class="sort.by !== 'due' && 'hint'"></span></button></th>
+          <th scope="col">Платёж</th>
+          <th scope="col" class="r" style="padding-right:24px" :aria-sort="sort.by === 'amount' ? (sort.dir > 0 ? 'ascending' : 'descending') : null"><button class="sort" type="button" @click="sortBy('amount')">Сумма <span aria-hidden="true" x-text="sort.by === 'amount' ? (sort.dir > 0 ? '↑' : '↓') : '↕'" :class="sort.by !== 'amount' && 'hint'"></span></button></th>
+          <th scope="col">Отметка</th>
+          <th scope="col" :aria-sort="sort.by === 'od' ? (sort.dir > 0 ? 'ascending' : 'descending') : null"><button class="sort" type="button" @click="sortBy('od')">Просрочка <span aria-hidden="true" x-text="sort.by === 'od' ? (sort.dir > 0 ? '↑' : '↓') : '↕'" :class="sort.by !== 'od' && 'hint'"></span></button></th>
+          <th scope="col"><span class="sr-only">Вложения</span></th>
+          <th scope="col"><span class="sr-only">Действия</span></th>
+        </tr></thead>
+        <tbody>
+          <template x-for="o in page" :key="o.id">
+            <tr :data-oid="o.id" :class="$store.ik.state(o)">
+              <td class="date" data-k="date" x-text="F.date(o.due)"></td>
+              <td data-k="name"><button class="link name name-btn" type="button" @click="$store.dlg.open('period', { oid: o.id }, $event)" x-text="$store.ik.payOf(o).name"></button>
+                <span class="name-sub" x-text="F.period($store.ik.payOf(o).period) + ($store.ik.payOf(o).deleted ? ' · прекращён' : '')"></span></td>
+              <td class="sum" data-k="sum" x-text="F.num(o.amount) + ' ' + F.sign(o.currency)"></td>
+              <td class="mark-cell" data-k="mark" x-html="mark(o)"></td>
+              <td class="od" data-k="hide-sm" :class="$store.ik.daysOverdue(o) && 'red'" x-text="$store.ik.daysOverdue(o) ? F.days($store.ik.daysOverdue(o)) : '—'"></td>
+              <td data-k="hide-sm"><span class="clip" x-show="o.files.length" :aria-label="'Вложений: ' + o.files.length" x-html="ICON.clip + '<span aria-hidden=true>' + o.files.length + '</span>'"></span></td>
+              <td class="acts" data-k="more">
+                <template x-if="!o.paid"><button class="btn sm" type="button" @click="$store.dlg.open('markPaid', { oid: o.id }, $event)" :aria-label="'Отметить оплату: ' + $store.ik.payOf(o).name + ', срок ' + F.date(o.due)">Отметить оплату</button></template>
+                <template x-if="o.paid"><div class="row-menu" x-data="{ open: false }" @keydown.escape.stop="if (open) { open = false; $refs.mb.focus() }" @click.outside="open = false">
+                  <button class="btn sm quiet dots" x-ref="mb" type="button" :aria-expanded="open" @click="open = !open" :aria-label="'Действия с оплатой: ' + $store.ik.payOf(o).name + ', срок ' + F.date(o.due)">⋯</button>
+                  <div class="row-menu-list" x-show="open" x-cloak x-transition.opacity>
+                    <button type="button" @click="open = false; $store.dlg.open('changeDate', { oid: o.id }, { currentTarget: $refs.mb })">Изменить дату оплаты</button>
+                    <button type="button" @click="open = false; $store.dlg.open('attach', { oid: o.id }, { currentTarget: $refs.mb })">Прикрепить чек или ссылку</button>
+                    <button type="button" class="danger" @click="open = false; $store.dlg.open('unmark', { oid: o.id }, { currentTarget: $refs.mb })">Снять отметку</button>
+                  </div>
+                </div></template>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <nav class="pager" aria-label="Страницы">
+        <span x-text="(from + 1) + '–' + Math.min(from + per, filtered.length) + ' из ' + filtered.length"></span>
+        <span class="btn-row">
+          <button class="btn sm quiet" type="button" :disabled="pageNo === 0" @click="pageNo--">‹ Раньше</button>
+          <span x-text="'Страница ' + (pageNo + 1) + ' из ' + pages"></span>
+          <button class="btn sm quiet" type="button" :disabled="pageNo >= pages - 1" @click="pageNo++">Позже ›</button>
+        </span>
+      </nav>
+    </div>
+  </template>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  const q = new URLSearchParams(location.search);
+  const base = () => ({ status: '', cur: [], overdue: false, from: '2026-09-01', to: '2026-11-30', pid: '', q: '' });
+  Alpine.data('periods', () => ({
+    f: Object.assign(base(), q.get('state') === 'nothing' ? { overdue: true, cur: ['EUR'] } : {}, q.get('overdue') ? { overdue: true } : {}),
+    sort: { by: 'due', dir: 1 },
+    showF: false,
+    per: 12,
+    pageNo: 0,
+    init() { this.$watch('f', () => { this.pageNo = 0; }, { deep: true }); },
+    toggleCur(c) { this.f.cur = this.f.cur.includes(c) ? this.f.cur.filter((x) => x !== c) : [...this.f.cur, c]; },
+    sortBy(k) { this.sort = { by: k, dir: this.sort.by === k ? -this.sort.dir : (k === 'due' ? 1 : -1) }; },
+    resetFilters() { this.f = base(); },
+    get dirty() { return JSON.stringify(this.f) !== JSON.stringify(base()); },
+    mark(o) {
+      const ik = this.$store.ik, s = ik.state(o);
+      if (o.paid) return '<span class="stamp' + (s === 'paid_late' ? ' late' : '') + (o.hit && Date.now() - o.hit < 1500 ? ' hit' : '') + '" style="' + F.stamp(o) + '">Оплачено <em>' + F.short(o.paid) + '</em></span>' +
+        (s === 'paid_late' ? '<span class="late-inline">позже на ' + F.days(ik.daysOverdue(o)) + '</span>' : '');
+      if (s === 'overdue') return '<span class="note-red">' + ik.rel(o) + '</span>';
+      if (s === 'due_soon') return '<span class="soon-t">' + ik.rel(o) + '</span>';
+      return '<span class="muted">' + ik.rel(o) + '</span>';
+    },
+    get summaryText() {
+      const f = this.f, parts = [];
+      if (f.status) parts.push(f.status === 'paid' ? 'оплачено' : 'не оплачено');
+      if (f.overdue) parts.push('только с просрочкой');
+      if (f.cur.length) parts.push(f.cur.join(', '));
+      if (f.pid) parts.push('«' + this.$store.ik.pay(f.pid).name + '»');
+      if (f.q) parts.push('поиск «' + f.q + '»');
+      parts.push('срок ' + F.date(f.from) + '–' + F.date(f.to));
+      return parts.join(', ');
+    },
+    get filtered() {
+      const ik = this.$store.ik, f = this.f, q = f.q.trim().toLowerCase();
+      const key = { due: (o) => o.due, amount: (o) => o.amount, od: (o) => ik.daysOverdue(o) }[this.sort.by];
+      return ik.occurrences.filter((o) => {
+        const p = ik.payOf(o);
+        if (!p) return false;
+        if (f.status === 'paid' && !o.paid) return false;
+        if (f.status === 'unpaid' && o.paid) return false;
+        if (f.overdue && !['overdue', 'paid_late'].includes(ik.state(o))) return false;
+        if (f.cur.length && !f.cur.includes(o.currency)) return false;
+        if (f.from && o.due < f.from) return false;
+        if (f.to && o.due > f.to) return false;
+        if (f.pid && o.pid !== f.pid) return false;
+        if (q && !p.name.toLowerCase().includes(q)) return false;
+        return true;
+      }).sort((a, b) => (key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : a.pid.localeCompare(b.pid)) * this.sort.dir);
+    },
+    get pages() { return Math.max(1, Math.ceil(this.filtered.length / this.per)); },
+    get from() { return Math.min(this.pageNo, this.pages - 1) * this.per; },
+    get page() { return this.filtered.slice(this.from, this.from + this.per); },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

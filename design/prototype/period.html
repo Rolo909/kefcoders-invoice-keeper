@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Период — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .period-page { max-width: 860px; }
+  .period-page .pay-box { max-width: 620px; }
+</style>
+</head>
+<body data-page="period">
+<div id="shell"></div>
+
+<main id="main" class="page" tabindex="-1">
+  <p class="crumbs"><a href="periods.html">Периоды</a> ›</p>
+  <div class="period-page" x-data="period(window.PERIOD_ID)" x-init="document.title = p.name + ', ' + F.date(o.due) + ' — Invoice Keeper'">
+    <div data-period-detail></div>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script>
+  (function () {
+    const id = new URLSearchParams(location.search).get('id');
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem('ik-state') || 'null'); } catch (e) { saved = null; }
+    const list = (saved && saved.occurrences) || window.IKD.occurrences;
+    window.PERIOD_ID = list.some((o) => o.id === id) ? id : 'do-3';
+  })();
+</script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

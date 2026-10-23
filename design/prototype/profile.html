@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Профиль — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .prof { max-width: 760px; }
+  .block { border-top: 3px double var(--rule-2); padding: 16px 0 26px; display: grid; gap: 14px; }
+  .block > p { max-width: 62ch; }
+  .block h2 { font: 700 22px/1.2 var(--f-serif); display: flex; align-items: center; gap: 10px; }
+  .code { font: 400 34px/1 var(--f-mono); letter-spacing: .12em; padding: 12px 16px; border: 2px dashed var(--violet); color: var(--violet); border-radius: var(--r); display: inline-block; }
+  .steps { counter-reset: s; display: grid; gap: 10px; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; gap: 10px; }
+  .steps li::before { content: counter(s); font: 700 15px/26px var(--f-serif); width: 26px; height: 26px; border: 1.5px solid var(--rule-2); border-radius: 50%; text-align: center; }
+  kbd { font-family: var(--f-mono); background: var(--paper-2); border: 1px solid var(--rule); border-radius: 3px; padding: 1px 6px; }
+  .linked { display: flex; align-items: center; gap: 12px; }
+  .block > .seg, .block > div, .block > form { justify-self: start; }
+</style>
+</head>
+<body data-page="profile">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="profile" tabindex="-1">
+  <div class="prof">
+    <div class="page-head"><h1>Профиль</h1></div>
+    <p class="lead" x-text="me.name + ' · ' + me.login + ' · ' + (me.role === 'admin' ? 'администратор' : 'пользователь')"></p>
+    <p class="small muted" style="margin:-8px 0 22px" x-show="me.system">Учётная запись администратора задана в файле .env: логин и пароль меняются только там.</p>
+
+    <section class="block" aria-labelledby="tg-t">
+      <h2 id="tg-t"><span x-html="ICON.tg"></span>Telegram</h2>
+      <p class="muted">Напоминания приходят в общий чат команды. Привяжите свой аккаунт, чтобы отмечать оплату кнопкой «Оплачено» прямо в сообщении бота.</p>
+      <template x-if="me.telegram">
+        <div class="linked"><span class="stamp" style="transform:rotate(-2deg)">Привязан</span><b x-text="me.telegram"></b></div>
+      </template>
+      <template x-if="!me.telegram">
+        <div style="display:grid;gap:14px">
+          <ol class="steps">
+            <li><span>Получите код привязки. Он действует 10 минут.</span></li>
+            <li><span>Откройте бота <a href="https://t.me/InvoiceKeeperBot">@InvoiceKeeperBot</a> в личных сообщениях.</span></li>
+            <li><span>Отправьте боту команду <kbd x-text="'/link ' + (code || '123456')"></kbd>.</span></li>
+          </ol>
+          <div x-show="!code"><button class="btn primary" type="button" @click="getCode()">Получить код</button></div>
+          <div x-show="code" style="display:grid;gap:8px" aria-live="polite">
+            <span class="code" x-text="code.slice(0, 3) + ' ' + code.slice(3)"></span>
+            <span class="small muted">Код действует до 10:52. Бот ответит, когда аккаунт будет привязан.</span>
+            <span><button class="btn sm quiet" type="button" @click="getCode()">Получить новый код</button></span>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <section class="block" aria-labelledby="em-t">
+      <h2 id="em-t">Почта</h2>
+      <form @submit.prevent="saveEmail()" novalidate style="display:grid;gap:14px;max-width:460px">
+        <div class="field"><label for="pr-email">Адрес для напоминаний</label>
+          <input class="input" id="pr-email" type="email" inputmode="email" autocomplete="email" placeholder="name@kefcoders.ru" x-model="email" :disabled="me.system" :aria-invalid="!!emErr" aria-describedby="pr-email-e">
+          <span class="err" id="pr-email-e" x-text="emErr"></span></div>
+        <label class="check"><input type="checkbox" x-model="notify" :disabled="me.system"><span>Присылать напоминания на почту<span class="name-sub">Письмо приходит одновременно с сообщением в Telegram, за 3 дня до срока.</span></span></label>
+        <div x-show="!me.system"><button class="btn" type="submit">Сохранить настройки почты</button></div>
+      </form>
+    </section>
+
+    <section class="block" aria-labelledby="th-t">
+      <h2 id="th-t">Оформление</h2>
+      <div class="seg" role="group" aria-labelledby="th-t">
+        <button type="button" :aria-pressed="$store.ik.theme === 'light'" @click="$store.ik.setTheme('light')">Светлая тема</button>
+        <button type="button" :aria-pressed="$store.ik.theme === 'dark'" @click="$store.ik.setTheme('dark')">Тёмная тема</button>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="se-t">
+      <h2 id="se-t">Сессия</h2>
+      <p class="muted">Вход сохраняется на 7 дней на этом устройстве.</p>
+      <div><a class="btn danger" href="login.html?state=loggedout">Выйти</a></div>
+    </section>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('profile', () => ({
+    code: '', email: '', notify: false, emErr: '',
+    init() { this.email = this.me.email; this.notify = this.me.notifyEmail; },
+    get me() { return this.$store.ik.me; },
+    getCode() { this.code = String(482917 + Math.floor(Math.random() * 9)); },
+    saveEmail() {
+      if (this.email && !/^\S+@\S+\.\S+$/.test(this.email)) { this.emErr = 'Введите адрес целиком, например name@kefcoders.ru.'; return; }
+      if (this.notify && !this.email) { this.emErr = 'Укажите почту, чтобы получать на неё напоминания.'; return; }
+      this.emErr = '';
+      this.me.email = this.email; this.me.notifyEmail = this.notify;
+      this.$store.ik.save();
+      this.$store.ik.toast(this.notify ? 'Сохранено. Напоминания будут приходить на ' + this.email + '.' : 'Сохранено. Напоминания на почту выключены.');
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

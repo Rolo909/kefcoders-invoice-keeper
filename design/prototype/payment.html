@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Платёж — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .pay-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 56px; margin-top: 22px; }
+  .params { border-top: 3px double var(--rule-2); padding-top: 14px; }
+  .params .kv { row-gap: 10px; }
+  .params .kv dd { font-weight: 700; }
+  .params .kv dd.mono, .params .kv dd .mono { font-weight: 400; }
+  .params .kv dd small { display: block; font-weight: 400; color: var(--ink-2); font-size: 13px; }
+  .mark-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .ledger td.mark { width: 330px; padding-left: 24px; }
+  .ledger th.mark { padding-left: 24px; }
+  @media (max-width: 1100px) { .pay-grid { grid-template-columns: 1fr; gap: 24px; } }
+  @media (max-width: 760px) { .ledger td.mark { width: auto; padding-left: 0; } }
+</style>
+</head>
+<body data-page="payment">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="paymentPage" tabindex="-1">
+  <p class="crumbs"><a href="payments.html">Регулярные платежи</a> ›</p>
+  <div class="page-head">
+    <h1 x-text="p.name"></h1>
+    <div class="actions" x-show="$store.ik.isAdmin && !p.deleted">
+      <button class="btn danger" type="button" @click="$store.dlg.open('stopPayment', { pid: p.id }, $event)">Прекратить платёж</button>
+    </div>
+  </div>
+  <p class="lead" x-html="lead"></p>
+
+  <div class="pay-grid">
+    <section class="params" aria-labelledby="par-t">
+      <h2 id="par-t" class="sr-only">Параметры</h2>
+      <dl class="kv">
+        <dt>Сумма</dt><dd class="mono" x-text="F.money(p.amount, p.currency)"></dd>
+        <dt>Периодичность</dt><dd x-text="F.period(p.period)"></dd>
+        <dt>Первый срок</dt><dd><span class="mono" x-text="F.date(p.first)"></span><small x-text="p.period === 'monthly' && +p.first.slice(8) > 28 ? 'Все сроки — ' + (+p.first.slice(8)) + '-го, в коротких месяцах — последний день' : 'От этой даты считаются все сроки'"></small></dd>
+        <dt>Окончание</dt><dd x-text="p.end ? F.date(p.end) : 'Не задано'"></dd>
+        <dt>Описание</dt><dd style="font-weight:400" x-text="p.desc || '—'"></dd>
+        <dt>Создан</dt><dd style="font-weight:400" x-text="F.date(p.created) + ', ' + $store.ik.userName(p.createdBy)"></dd>
+        <dt>Состояние</dt><dd :class="p.deleted && 'muted'" x-text="p.deleted ? 'Прекращён ' + F.date(p.deleted) + '. Новых периодов и напоминаний нет' : 'Действует. Напоминание — за 3 дня до срока'"></dd>
+      </dl>
+      <p class="small muted" style="margin-top:16px">Сумму и срок не меняют задним числом: чтобы изменить их, прекратите платёж и создайте новый. Прошлые периоды останутся как были.</p>
+    </section>
+
+    <section aria-labelledby="hist-t">
+      <h2 id="hist-t" class="section-title" style="margin-top:0">Все периоды</h2>
+      <table class="ledger stack attn">
+        <thead><tr><th scope="col">Срок</th><th scope="col" class="r" style="padding-right:24px;border-right:1px solid var(--rule-2)">Сумма</th><th scope="col" class="mark">Отметка</th><th scope="col">Вложения</th></tr></thead>
+        <tbody>
+          <template x-for="o in periods" :key="o.id">
+            <tr :data-oid="o.id" :class="$store.ik.state(o)">
+              <td class="date" data-k="date"><button class="link mono name-btn" type="button" @click="$store.dlg.open('period', { oid: o.id }, $event)" x-text="F.date(o.due)" :aria-label="'Период ' + F.date(o.due)"></button></td>
+              <td class="sum ruled" data-k="sum" x-text="F.num(o.amount) + ' ' + F.sign(o.currency)"></td>
+              <td class="mark" data-k="mark" x-html="mark(o)"></td>
+              <td data-k="hide-sm" class="muted" x-text="o.files.length ? o.files.length + ' ' + F.plural(o.files.length, 'файл', 'файла', 'файлов') : '—'"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  const id = new URLSearchParams(location.search).get('id');
+  Alpine.data('paymentPage', () => ({
+    init() { document.title = this.p.name + ' — Invoice Keeper'; },
+    get p() { const ik = this.$store.ik; return ik.pay(id) || ik.pay('figma'); },
+    get periods() { return this.$store.ik.occurrences.filter((o) => o.pid === this.p.id).sort((a, b) => b.due.localeCompare(a.due)); },
+    get lead() {
+      const ik = this.$store.ik, list = this.periods, paid = list.filter((o) => o.paid);
+      const sum = paid.reduce((s, o) => s + o.amount, 0);
+      const od = list.filter((o) => ik.state(o) === 'overdue').length;
+      return 'Оплачено ' + paid.length + ' из ' + list.length + ' ' + F.plural(list.length, 'периода', 'периодов', 'периодов') + ' на ' + F.money(sum, this.p.currency) + '.' +
+        (od ? ' <span class="red">Просрочено: ' + od + '.</span>' : '');
+    },
+    mark(o) {
+      const ik = this.$store.ik, s = ik.state(o);
+      if (o.paid) return '<span class="stamp' + (s === 'paid_late' ? ' late' : '') + (o.hit && Date.now() - o.hit < 1500 ? ' hit' : '') + '" style="' + F.stamp(o) + '">Оплачено <em>' + F.short(o.paid) + '</em></span>' +
+        (s === 'paid_late' ? '<span class="late-inline">позже на ' + F.days(ik.daysOverdue(o)) + '</span>' : '');
+      const btn = this.p.deleted && o.due > ik.today ? '' : '<button class="btn sm" type="button" @click="$store.dlg.open(\'markPaid\', { oid: \'' + o.id + '\' }, $event)">Отметить оплату</button>';
+      if (s === 'overdue') return '<div class="mark-row"><span class="note-red">' + ik.rel(o) + '</span>' + btn + '</div>';
+      if (s === 'due_soon') return '<div class="mark-row"><b class="amber">' + ik.rel(o) + '</b>' + btn + '</div>';
+      return '<div class="mark-row"><span class="muted">' + ik.rel(o) + '</span>' + btn + '</div>';
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

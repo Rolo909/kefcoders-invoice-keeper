@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Календарь — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .cal-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 40px; margin-top: 18px; }
+  .day-panel { border-top: 3px double var(--rule-2); padding-top: 12px; }
+  .day-panel h2 { font: 700 22px/1.2 var(--f-serif); }
+  .day-item { padding: 12px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 6px; }
+  .day-item .top { display: flex; justify-content: space-between; gap: 10px; }
+  .asof { margin-top: 26px; }
+  .asof h3 { font: 700 17px/1.2 var(--f-serif); margin-bottom: 8px; }
+  .asof table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .asof td, .asof th { padding: 6px 0; border-bottom: 1px solid var(--rule); text-align: right; font-weight: 400; }
+  .asof th { color: var(--ink-2); font-size: 13px; }
+  .asof td:first-child, .asof th:first-child { text-align: left; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; color: var(--ink-2); font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  @media (max-width: 1100px) { .cal-wrap { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="calendar">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="calendar" tabindex="-1">
+  <div class="page-head">
+    <h1 x-text="F.month(ym)"></h1>
+    <div class="actions">
+      <button class="btn sm quiet" type="button" @click="go(-1)" x-text="'‹ ' + F.monthOnly(shift(-1))"></button>
+      <button class="btn sm quiet" type="button" x-show="ym !== $store.ik.today.slice(0, 7)" @click="ym = $store.ik.today.slice(0, 7); sel = $store.ik.today; focusDay = sel">Сегодня</button>
+      <button class="btn sm quiet" type="button" @click="go(1)" x-text="F.monthOnly(shift(1)) + ' ›'"></button>
+    </div>
+  </div>
+
+  <div class="cal-wrap">
+    <section aria-label="Календарь оплат">
+      <p class="sr-only" id="cal-help">Стрелки переходят между днями, Enter выбирает день.</p>
+      <div class="cal" :aria-label="F.month(ym)" role="group" aria-describedby="cal-help" @keydown="nav($event)">
+        <template x-for="w in ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']" :key="w"><div class="wd" aria-hidden="true" x-text="w"></div></template>
+        <template x-for="d in grid" :key="d.iso">
+          <button type="button" class="day" :class="{ out: !d.inMonth, we: d.we, today: d.iso === $store.ik.today }" :data-iso="d.iso"
+            :tabindex="focusDay === d.iso ? 0 : -1" :aria-pressed="sel === d.iso" @click="sel = d.iso; focusDay = d.iso" :aria-label="label(d)">
+            <span class="n" x-text="+d.iso.slice(8)"></span>
+            <span class="marks" aria-hidden="true"><template x-for="o in d.list" :key="o.id"><i class="mk" :class="$store.ik.state(o)"></i></template></span>
+            <template x-for="s in d.sums" :key="s.c"><span class="s" aria-hidden="true" x-text="F.num(s.v).replace(',00', '') + ' ' + F.sign(s.c)"></span></template>
+          </button>
+        </template>
+      </div>
+      <p class="legend" aria-hidden="true">
+        <span><i class="mk paid"></i>оплачено</span>
+        <span><i class="mk paid_late"></i>с опозданием</span>
+        <span><i class="mk overdue"></i>просрочено</span>
+        <span><i class="mk due_soon"></i>скоро</span>
+        <span><i class="mk upcoming"></i>ожидает</span>
+      </p>
+      <p class="sr-only" aria-live="polite" x-text="announce"></p>
+    </section>
+
+    <aside class="day-panel" aria-labelledby="day-t">
+      <h2 id="day-t" x-text="F.long(sel) + ', ' + F.weekday(sel)"></h2>
+      <p class="muted small" x-show="sel === $store.ik.today">сегодня</p>
+      <div style="margin-top:8px">
+        <template x-for="o in dayList" :key="o.id">
+          <div class="day-item" :data-oid="o.id">
+            <div class="top"><button class="link name name-btn" type="button" @click="$store.dlg.open('period', { oid: o.id }, $event)" x-text="$store.ik.payOf(o).name"></button>
+              <span class="mono nowrap" x-text="F.money(o.amount, o.currency)"></span></div>
+            <div class="top" style="align-items:center"><span class="st small" :class="$store.ik.state(o)" x-text="$store.ik.statusLine(o)"></span>
+              <button class="btn sm" type="button" x-show="!o.paid" @click="$store.dlg.open('markPaid', { oid: o.id }, $event)">Отметить оплату</button></div>
+          </div>
+        </template>
+        <p class="muted" style="padding:12px 0" x-show="!dayList.length">В этот день платежей нет.</p>
+      </div>
+
+      <div class="asof">
+        <h3 x-text="'Итоги на ' + F.long(sel)"></h3>
+        <p class="small muted" style="margin-bottom:8px" x-text="'За ' + F.monthOnly(ym).toLowerCase() + ', по фактическим датам оплаты.' + (sel > $store.ik.today ? ' Для будущей даты — если больше ничего не оплатить.' : '')"></p>
+        <table>
+          <thead><tr><th scope="col">Валюта</th><th scope="col">Оплачено</th><th scope="col">Осталось</th><th scope="col">Просрочено</th></tr></thead>
+          <tbody>
+            <template x-for="t in asOf" :key="t.currency">
+              <tr><td x-text="t.currency"></td><td class="mono" x-text="F.num(t.paid)"></td><td class="mono" x-text="F.num(t.unpaid)"></td><td class="mono" :class="t.overdue && 'red'" x-text="F.num(t.overdue)"></td></tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('calendar', () => ({
+    ym: '2026-10',
+    sel: '2026-10-26',
+    focusDay: '2026-10-26',
+    get announce() { const d = this.grid.find((x) => x.iso === this.sel); return d ? this.label(d) : ''; },
+    nav(e) {
+      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+      if (!step && e.key !== 'Home' && e.key !== 'End') return;
+      e.preventDefault();
+      const D = window.IKD;
+      let next = step ? D.addDays(this.focusDay, step) : this.focusDay.slice(0, 8) + (e.key === 'Home' ? '01' : String(D.lastDay(+this.ym.slice(0, 4), +this.ym.slice(5, 7))).padStart(2, '0'));
+      if (next.slice(0, 7) !== this.ym) this.ym = next.slice(0, 7);
+      this.focusDay = next; this.sel = next;
+      this.$nextTick(() => { const b = this.$root.querySelector('[data-iso="' + next + '"]'); if (b) b.focus(); });
+    },
+    shift(n) { const y = +this.ym.slice(0, 4), m = +this.ym.slice(5, 7) - 1 + n; return (y + Math.floor(m / 12)) + '-' + String((m % 12 + 12) % 12 + 1).padStart(2, '0'); },
+    go(n) { this.ym = this.shift(n); this.sel = this.ym + '-01'; this.focusDay = this.sel; },
+    get grid() {
+      const D = window.IKD, ik = this.$store.ik, first = this.ym + '-01';
+      const dow = (new Date(first + 'T12:00:00').getDay() + 6) % 7;
+      const start = D.addDays(first, -dow), cells = [];
+      const last = D.lastDay(+this.ym.slice(0, 4), +this.ym.slice(5, 7));
+      const total = Math.ceil((dow + last) / 7) * 7;
+      for (let i = 0; i < total; i++) {
+        const iso = D.addDays(start, i);
+        const list = ik.occurrences.filter((o) => o.due === iso && ik.payOf(o));
+        const sums = D.CURRENCIES.map((c) => ({ c, v: list.filter((o) => o.currency === c).reduce((s, o) => s + o.amount, 0) })).filter((s) => s.v);
+        cells.push({ iso, inMonth: iso.slice(0, 7) === this.ym, we: i % 7 >= 5, list, sums });
+      }
+      return cells;
+    },
+    label(d) {
+      const ik = this.$store.ik;
+      if (!d.list.length) return F.long(d.iso) + ', платежей нет';
+      return F.long(d.iso) + ': ' + d.list.map((o) => ik.payOf(o).name + ', ' + F.money(o.amount, o.currency) + ', ' + ik.stateLabel(o).toLowerCase()).join('; ');
+    },
+    get dayList() { const ik = this.$store.ik; return ik.occurrences.filter((o) => o.due === this.sel && ik.payOf(o)); },
+    get asOf() {
+      const last = window.IKD.lastDay(+this.ym.slice(0, 4), +this.ym.slice(5, 7));
+      return this.$store.ik.totals(this.ym + '-01', this.ym + '-' + last, this.sel);
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

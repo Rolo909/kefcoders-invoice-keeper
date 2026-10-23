@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Журнал — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .tabs { display: flex; gap: 26px; border-bottom: 1px solid var(--rule-2); margin: 8px 0 0; }
+  .tabs button { background: none; border: 0; padding: 10px 0; cursor: pointer; color: var(--ink-2); font-size: 16px; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--ink); font-weight: 700; border-bottom-color: var(--violet); }
+  .ledger td.time { width: 120px; }
+  .act-failed { color: var(--red); font-weight: 700; }
+  .ip { font-family: var(--f-mono); color: var(--ink-2); white-space: nowrap; }
+</style>
+</head>
+<body data-page="journal">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="journal" tabindex="-1">
+  <template x-if="!$store.ik.isAdmin">
+    <div class="denied">
+      <h1>Раздел доступен только администратору</h1>
+      <p class="muted">Журнал входов, действий и уведомлений видит администратор. Историю своих оплат можно посмотреть в карточке периода.</p>
+      <p><a class="btn" href="periods.html">Открыть периоды</a></p>
+    </div>
+  </template>
+
+  <template x-if="$store.ik.isAdmin">
+    <div>
+      <div class="page-head">
+        <h1>Журнал</h1>
+        <div class="actions" x-show="tab === 'notify'"><button class="btn" type="button" @click="testSend()">Отправить тестовое уведомление</button></div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Журнал" @keydown.right.prevent="tab = 'notify'; $nextTick(() => $refs.t2.focus())" @keydown.left.prevent="tab = 'audit'; $nextTick(() => $refs.t1.focus())">
+        <button type="button" role="tab" id="t-audit" x-ref="t1" aria-controls="p-audit" :aria-selected="tab === 'audit'" :tabindex="tab === 'audit' ? 0 : -1" @click="tab = 'audit'">Действия и входы</button>
+        <button type="button" role="tab" id="t-notify" x-ref="t2" aria-controls="p-notify" :aria-selected="tab === 'notify'" :tabindex="tab === 'notify' ? 0 : -1" @click="tab = 'notify'">Уведомления</button>
+      </div>
+
+      <section id="p-audit" role="tabpanel" aria-labelledby="t-audit" x-show="tab === 'audit'">
+        <form class="filters" @submit.prevent aria-label="Фильтры журнала">
+          <div class="field"><label for="j-act">Действие</label>
+            <select class="select" id="j-act" x-model="fa.action"><option value="">Все действия</option>
+              <optgroup label="Вход"><option value="auth">Входы и выходы</option><option value="auth.login_failed">Только неудачные входы</option></optgroup>
+              <optgroup label="Оплаты"><option value="occurrence">Отметки и даты оплаты</option><option value="telegram.mark_paid">Оплаты из Telegram</option><option value="attachment">Вложения</option></optgroup>
+              <optgroup label="Управление"><option value="payment">Платежи</option><option value="user">Пользователи</option></optgroup></select></div>
+          <div class="field"><label for="j-user">Кто</label>
+            <select class="select" id="j-user" x-model="fa.actor"><option value="">Все</option>
+              <template x-for="u in $store.ik.users" :key="u.id"><option :value="u.login" x-text="u.login + (u.name && u.name !== 'Администратор' ? ' — ' + u.name : '')"></option></template></select></div>
+          <div class="field"><label for="j-from">С</label><input class="input mono" id="j-from" type="date" x-model="fa.from"></div>
+          <div class="field"><label for="j-to">по</label><input class="input mono" id="j-to" type="date" x-model="fa.to"></div>
+        </form>
+        <table class="ledger stack">
+          <caption class="sr-only">Действия и входы</caption>
+          <thead><tr><th scope="col">Время</th><th scope="col">Кто</th><th scope="col">Действие</th><th scope="col">Подробности</th><th scope="col">IP</th></tr></thead>
+          <tbody>
+            <template x-for="(a, i) in audit" :key="a.at + i">
+              <tr>
+                <td class="date time" data-k="date" x-text="F.time(a.at)"></td>
+                <td data-k="name" class="mono" x-text="a.actor"></td>
+                <td data-k="sum" :class="a.action === 'auth.login_failed' && 'act-failed'" x-text="F.action(a.action)"></td>
+                <td data-k="mark"><span x-text="a.text"></span>
+                  <a class="small" style="margin-left:6px" x-show="a.oid" :href="'period.html?id=' + a.oid">период</a></td>
+                <td class="ip" data-k="hide-sm" x-text="a.ip || 'Telegram'"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="empty" x-show="!audit.length"><h2>Записей нет</h2><p>По этим фильтрам событий не нашлось.</p><button class="btn" type="button" @click="fa = { action: '', actor: '', from: '', to: '' }">Сбросить фильтры</button></div>
+      </section>
+
+      <section id="p-notify" role="tabpanel" aria-labelledby="t-notify" x-show="tab === 'notify'" x-cloak>
+        <form class="filters" @submit.prevent aria-label="Фильтры уведомлений">
+          <div class="field"><label for="n-ch">Канал</label>
+            <select class="select" id="n-ch" x-model="fn.channel"><option value="">Все каналы</option><option value="telegram">Telegram</option><option value="email">Почта</option><option value="webhook">Webhook</option><option value="inapp">В панели</option></select></div>
+          <div class="field"><label for="n-st">Статус</label>
+            <select class="select" id="n-st" x-model="fn.status"><option value="">Все</option><option value="sent">Доставлено</option><option value="failed">Не доставлено</option></select></div>
+          <p class="small muted" style="align-self:center;max-width:420px">Каждое напоминание уходит один раз на период и канал. Неудачные отправки повторяются до 5 раз.</p>
+        </form>
+        <table class="ledger stack">
+          <caption class="sr-only">Уведомления</caption>
+          <thead><tr><th scope="col">Время</th><th scope="col">Канал</th><th scope="col">Платёж и период</th><th scope="col">Тип</th><th scope="col">Статус</th><th scope="col" class="r">Попыток</th></tr></thead>
+          <tbody>
+            <template x-for="r in notes" :key="r.id">
+              <tr>
+                <td class="date time" data-k="date" x-text="F.time(r.at)"></td>
+                <td data-k="sum" x-text="F.channel(r.channel)"></td>
+                <td data-k="name"><a :href="'period.html?id=' + r.oid" x-text="$store.ik.occ(r.oid) ? $store.ik.payOf($store.ik.occ(r.oid)).name : 'Период удалён'"></a>
+                  <span class="name-sub mono" x-text="$store.ik.occ(r.oid) ? F.date($store.ik.occ(r.oid).due) : ''"></span></td>
+                <td data-k="hide-sm" x-text="r.kind === 'overdue' ? 'О просрочке' : 'За 3 дня'"></td>
+                <td data-k="mark"><span class="st" :class="r.status === 'sent' ? 'paid' : 'overdue'" x-text="r.status === 'sent' ? 'Доставлено' : 'Не доставлено'"></span>
+                  <span class="name-sub" :class="r.status === 'failed' && 'red'" x-show="r.error" x-text="r.error + (r.to ? ' (' + r.to + ')' : '')"></span></td>
+                <td class="sum" data-k="hide-sm" x-text="r.attempts"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  const q = new URLSearchParams(location.search);
+  Alpine.data('journal', () => ({
+    tab: q.get('tab') === 'notify' ? 'notify' : 'audit',
+    fa: { action: '', actor: '', from: '', to: '' },
+    fn: { channel: '', status: '' },
+    init() { if (!this.$store.ik.isAdmin) document.title = 'Нет доступа — Invoice Keeper'; },
+    get audit() {
+      const f = this.fa;
+      return this.$store.ik.audit.filter((a) => (!f.action || a.action === f.action || a.action.startsWith(f.action + '.')) &&
+        (!f.actor || a.actor === f.actor) && (!f.from || a.at.slice(0, 10) >= f.from) && (!f.to || a.at.slice(0, 10) <= f.to));
+    },
+    get notes() {
+      const f = this.fn;
+      return this.$store.ik.reminders.filter((r) => (!f.channel || r.channel === f.channel) && (!f.status || r.status === f.status))
+        .sort((a, b) => b.at.localeCompare(a.at));
+    },
+    testSend() { this.$store.ik.toast('Тестовое сообщение отправлено: Telegram, почта, webhook и колокольчик в панели. Проверьте, что оно дошло.'); },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

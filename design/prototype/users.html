@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пользователи — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .env-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border: 1.5px solid var(--violet); color: var(--violet); border-radius: var(--r); font-size: 13px; font-weight: 700; transform: rotate(-2deg); }
+</style>
+</head>
+<body data-page="users">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="usersPage" tabindex="-1">
+  <template x-if="!$store.ik.isAdmin">
+    <div class="denied">
+      <h1>Раздел доступен только администратору</h1>
+      <p class="muted">Пользователей добавляет и удаляет администратор. Если вам нужен доступ для коллеги, напишите ему.</p>
+      <p><a class="btn" href="index.html">Вернуться к сводке</a></p>
+    </div>
+  </template>
+
+  <template x-if="$store.ik.isAdmin">
+    <div>
+      <div class="page-head">
+        <h1>Пользователи</h1>
+        <div class="actions"><button class="btn primary" type="button" @click="$store.dlg.open('userForm', {}, $event)">Новый пользователь</button></div>
+      </div>
+
+      <table class="ledger stack">
+        <caption class="sr-only">Пользователи</caption>
+        <thead><tr><th scope="col">Пользователь</th><th scope="col">Почта</th><th scope="col">Telegram</th><th scope="col">Роль</th><th scope="col">Создан</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
+        <tbody>
+          <template x-for="u in $store.ik.users" :key="u.id">
+            <tr>
+              <td data-k="name"><b x-text="u.name || u.login"></b><span class="name-sub mono" x-text="u.login"></span></td>
+              <td data-k="hide-sm"><span x-text="u.email || '—'"></span><span class="name-sub" x-show="u.email" x-text="u.notifyEmail ? 'напоминания приходят на почту' : 'напоминания на почту выключены'"></span></td>
+              <td data-k="hide-sm" :class="!u.telegram && 'muted'" x-text="u.telegram || 'не привязан'"></td>
+              <td data-k="mark"><span x-text="u.role === 'admin' ? 'Администратор' : 'Пользователь'"></span><span class="env-tag" x-show="u.system">из .env</span></td>
+              <td class="date" data-k="hide-sm" x-text="F.date(u.created)"></td>
+              <td class="acts" data-k="more">
+                <template x-if="u.system"><span class="small muted">Меняется только в .env</span></template>
+                <template x-if="!u.system"><span class="btn-row" style="justify-content:flex-end;gap:4px">
+                  <button class="btn sm quiet" type="button" @click="$store.dlg.open('userForm', { uid: u.id }, $event)" :aria-label="'Изменить пользователя ' + u.login">Изменить</button>
+                  <button class="btn sm quiet" type="button" style="color:var(--red)" @click="$store.dlg.open('deleteUser', { uid: u.id }, $event)" :aria-label="'Удалить пользователя ' + u.login">Удалить</button>
+                </span></template>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <p class="small muted" style="margin-top:12px">Удаление или смена пароля сразу завершают все сессии пользователя. Отметки об оплате остаются в истории.</p>
+    </div>
+  </template>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('usersPage', () => ({
+    init() {
+      if (!this.$store.ik.isAdmin) document.title = 'Нет доступа — Invoice Keeper';
+      if (new URLSearchParams(location.search).get('dialog') === 'new') this.$nextTick(() => this.$store.dlg.open('userForm', {}));
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

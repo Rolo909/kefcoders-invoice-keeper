@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сводка — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .mark-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .soon b { font-weight: 700; color: var(--amber); }
+  .bar-cap { gap: 10px; }
+  .bar-cap i { display: inline-block; width: 10px; height: 8px; margin-right: 5px; vertical-align: 0; }
+  .lg-fill { background: var(--ink); }
+  .lg-cap { width: 2px !important; height: 12px !important; background: var(--violet); vertical-align: -2px !important; }
+  .soon small { display: block; color: var(--ink-2); font-size: 13px; line-height: 1.25; }
+  .ledger td.mark { width: 360px; padding-left: 24px; }
+  .ledger th.mark { padding-left: 24px; }
+  .ledger td.date { width: 76px; }
+  .month-nav { display: flex; gap: 6px; }
+  .done { display: flex; align-items: center; gap: 28px; padding: 40px 0 8px; }
+  .done p { color: var(--ink-2); max-width: 360px; }
+  @media (max-width: 760px) {
+    .ledger td.mark { width: auto; padding-left: 0; }
+    .mark-row { justify-content: flex-start; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body data-page="index">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="dashboard" tabindex="-1">
+  <div class="split">
+    <section class="accounts" aria-labelledby="acc-t">
+      <h2 id="acc-t" x-text="'Лицевые счета за ' + F.monthOnly(ym).toLowerCase()"></h2>
+      <div class="accounts-list" :class="!ready && 'loading'">
+        <template x-if="!ready">
+          <div><template x-for="i in 3" :key="i"><div class="acct"><span class="sk" style="width:40%;height:18px"></span><span class="sk" style="margin-top:14px"></span><span class="sk" style="margin-top:8px"></span><span class="sk" style="margin-top:8px;width:70%"></span></div></template></div>
+        </template>
+        <p class="muted" x-show="empty" style="border-top:3px double var(--rule-2);padding-top:14px">Счета по рублям, долларам и евро появятся с первым платежом.</p>
+        <template x-for="a in (ready && !empty ? accounts : [])" :key="a.currency">
+          <div class="acct">
+            <div class="acct-head"><b x-text="a.name"></b><span x-text="F.sign(a.currency)" aria-hidden="true"></span></div>
+            <dl>
+              <dt>План</dt><dd x-text="F.num(a.planned)"></dd>
+              <dt>Оплачено</dt><dd x-num="a.paid"></dd>
+              <dt>К оплате</dt><dd class="strong" x-num="a.unpaid"></dd>
+              <template x-if="a.overdue > 0"><dt class="red">из них просрочено</dt></template>
+              <template x-if="a.overdue > 0"><dd class="red" x-num="a.overdue"></dd></template>
+            </dl>
+            <div class="budget" style="margin-top:12px">
+              <div class="bar" role="img" :aria-label="'Бюджет ' + F.num(a.budget) + ': оплачено ' + pct(a.paid, a) + ' %, план ' + pct(a.planned, a) + ' %'">
+                <div class="fill" :style="'width:' + Math.min(100, a.paid / a.budget * 100) + '%'"></div>
+                <div class="cap" :style="'left:' + Math.min(99.5, a.planned / a.budget * 100) + '%'"></div>
+              </div>
+              <p class="bar-cap" aria-hidden="true"><span><i class="lg-fill"></i>оплачено <span x-text="pct(a.paid, a) + ' %'"></span></span>
+                <span :class="a.planned > a.budget && 'red'"><i class="lg-cap"></i><span x-text="'план ' + pct(a.planned, a) + ' %'"></span></span>
+                <span x-text="'бюджет ' + F.num(a.budget).replace(',00', '')"></span></p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <section aria-labelledby="month-t">
+      <div class="page-head">
+        <h1 id="month-t" x-text="F.month(ym)"></h1>
+        <div class="actions month-nav">
+          <button class="btn sm quiet" type="button" @click="go(-1)" :disabled="ym <= '2026-06'" x-text="'‹ ' + F.monthOnly(shift(-1))"></button>
+          <button class="btn sm quiet" type="button" @click="ym = $store.ik.today.slice(0, 7)" x-show="ym !== $store.ik.today.slice(0, 7)">Текущий месяц</button>
+          <button class="btn sm quiet" type="button" @click="go(1)" :disabled="ym >= '2026-12'" x-text="F.monthOnly(shift(1)) + ' ›'"></button>
+        </div>
+      </div>
+
+      <template x-if="empty">
+        <div class="empty">
+          <span class="stamp big" aria-hidden="true">Пусто</span>
+          <h2>Книга пока пуста</h2>
+          <p>Здесь появятся сроки регулярных платежей — аренды, подписок, серверов — и отметки об оплате.</p>
+          <button class="btn" type="button" x-show="$store.ik.isAdmin" @click="$store.dlg.open('newPayment', {}, $event)">Добавить первый платёж</button>
+          <p x-show="!$store.ik.isAdmin">Платежи добавляет администратор. Когда они появятся, напоминания придут в Telegram.</p>
+        </div>
+      </template>
+
+      <template x-if="!empty">
+        <div>
+          <p class="lead" x-show="ready" x-html="lead"></p>
+          <p class="lead" x-show="!ready"><span class="sk" style="width:60%;height:18px"></span></p>
+          <table class="ledger stack attn" aria-describedby="month-t">
+            <thead><tr><th scope="col">Срок</th><th scope="col">Платёж</th><th scope="col" class="r" style="padding-right:24px;border-right:1px solid var(--rule-2)">Сумма</th><th scope="col" class="mark">Отметка</th></tr></thead>
+            <tbody x-show="!ready">
+              <template x-for="i in 8" :key="i"><tr><td><span class="sk" style="width:44px"></span></td><td><span class="sk" style="width:60%"></span></td><td class="sum ruled"><span class="sk" style="width:90px;margin-left:auto"></span></td><td class="mark"><span class="sk" style="width:120px"></span></td></tr></template>
+            </tbody>
+            <tbody class="enter" x-show="ready">
+              <template x-for="o in past" :key="o.id"><tr x-html="row(o)" :data-oid="o.id" :class="$store.ik.state(o)"></tr></template>
+            </tbody>
+            <tbody x-show="ready && isNow">
+              <tr class="today-row"><td colspan="4"><div class="today-line"><span x-text="'сегодня, ' + F.long($store.ik.today)"></span></div></td></tr>
+            </tbody>
+            <tbody class="enter" x-show="ready">
+              <template x-for="o in future" :key="o.id"><tr x-html="row(o)" :data-oid="o.id" :class="$store.ik.state(o)"></tr></template>
+            </tbody>
+          </table>
+          <div class="done" x-show="ready && isNow && allDone">
+            <span class="stamp big">Всё оплачено</span>
+            <p x-text="nextHint"></p>
+          </div>
+        </div>
+      </template>
+    </section>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  const st = new URLSearchParams(location.search).get('state');
+  Alpine.data('dashboard', () => ({
+    ym: '2026-10',
+    ready: st !== 'loading',
+    empty: st === 'empty',
+    init() {
+      const ik = this.$store.ik;
+      if (st === 'allpaid') { ik.month(this.ym).forEach((o) => { if (!o.paid) { o.paid = o.due <= ik.today ? o.due : ik.today; o.paidBy = 'anna'; } }); ik.inbox.forEach((i) => { i.read = true; }); }
+      if (st === 'empty') ik.inbox = [];
+      this.$watch('ym', () => { document.title = F.month(this.ym) + ' — Сводка — Invoice Keeper'; });
+    },
+    shift(n) { const y = +this.ym.slice(0, 4), m = +this.ym.slice(5, 7) - 1 + n; return (y + Math.floor(m / 12)) + '-' + String((m % 12 + 12) % 12 + 1).padStart(2, '0'); },
+    go(n) { this.ym = this.shift(n); },
+    get isNow() { return this.ym === this.$store.ik.today.slice(0, 7); },
+    get rows() { return this.$store.ik.month(this.ym); },
+    get past() { return this.rows.filter((o) => o.due < this.$store.ik.today); },
+    get future() { return this.rows.filter((o) => o.due >= this.$store.ik.today); },
+    get allDone() { return this.rows.length && this.rows.every((o) => o.paid); },
+    pct(v, a) { return Math.round(v / a.budget * 100); },
+    get accounts() {
+      const ik = this.$store.ik, last = window.IKD.lastDay(+this.ym.slice(0, 4), +this.ym.slice(5, 7));
+      return ik.totals(this.ym + '-01', this.ym + '-' + last).map((t) => ({ ...t,
+        budget: ik.budgets.month[t.currency] }));
+    },
+    get nextHint() {
+      const ik = this.$store.ik, n = ik.occurrences.filter((o) => !o.paid && o.due > ik.today).sort((a, b) => a.due.localeCompare(b.due))[0];
+      return n ? 'Следующий срок — ' + F.date(n.due) + ': «' + ik.payOf(n).name + '», ' + F.money(n.amount, n.currency) + '.' : 'Новых сроков пока нет.';
+    },
+    get lead() {
+      const ik = this.$store.ik, rows = this.rows;
+      const od = rows.filter((o) => ik.state(o) === 'overdue');
+      const sums = (list) => window.IKD.CURRENCIES.map((c) => list.filter((o) => o.currency === c).reduce((s, o) => s + o.amount, 0))
+        .map((v, i) => v ? F.money(v, window.IKD.CURRENCIES[i]) : '').filter(Boolean).join(', ');
+      const paid = rows.filter((o) => o.paid).length;
+      if (this.ym < ik.today.slice(0, 7)) {
+        return 'Оплачено ' + paid + ' из ' + rows.length + '.' + (od.length ? ' <span class="red">Не оплачено ' + od.length + ' — строки красными чернилами.</span>' : ' Месяц закрыт.');
+      }
+      if (this.ym > ik.today.slice(0, 7)) return 'Запланировано ' + rows.length + ' ' + F.plural(rows.length, 'платёж', 'платежа', 'платежей') + ': ' + sums(rows) + '.';
+      const left = rows.filter((o) => !o.paid && o.due >= ik.today);
+      const first = od.length ? '<span class="red">' + F.plural(od.length, 'Просрочен', 'Просрочено', 'Просрочено') + ' ' + od.length + ' ' + F.plural(od.length, 'платёж', 'платежа', 'платежей') + ' на ' + sums(od) + '.</span> ' : 'Просроченных платежей нет. ';
+      return first + (left.length ? 'До конца месяца оплатить ещё ' + left.length + '.' : 'Остальное в этом месяце оплачено.');
+    },
+    row(o) {
+      const ik = this.$store.ik, s = ik.state(o), p = ik.payOf(o);
+      const name = '<td data-k="name"><button class="link name name-btn" type="button" @click="$store.dlg.open(\'period\', { oid: \'' + o.id + '\' }, $event)">' + p.name + '</button>' +
+        (p.deleted ? '<span class="name-sub">платёж прекращён ' + F.date(p.deleted) + '</span>' : '') + '</td>';
+      const btn = (quiet) => '<button class="btn sm' + (quiet ? ' quiet' : '') + '" type="button"' + (quiet ? ' style="color:var(--violet)"' : '') + ' @click="$store.dlg.open(\'markPaid\', { oid: \'' + o.id + '\' }, $event)" aria-label="Отметить оплату: ' + p.name + ', срок ' + F.date(o.due) + '">Отметить оплату</button>';
+      let mark;
+      if (o.paid) {
+        mark = '<span class="stamp' + (s === 'paid_late' ? ' late' : '') + (o.hit && Date.now() - o.hit < 1500 ? ' hit' : '') + '" style="' + F.stamp(o) + '">Оплачено <em>' + F.short(o.paid) + '</em></span>' +
+          (s === 'paid_late' ? '<span class="late-inline">позже на ' + F.days(ik.daysOverdue(o)) + '</span>' : '');
+      } else if (s === 'overdue') {
+        mark = '<div class="mark-row"><span class="note-red">' + ik.rel(o) + '</span>' + btn(false) + '</div>';
+      } else if (s === 'due_soon') {
+        const r = ik.lastReminder(o);
+        mark = '<div class="mark-row"><span class="soon"><b>' + ik.rel(o) + '</b>' + (r ? '<small>напомнили в Telegram ' + F.short(r.at) + '</small>' : '') + '</span>' + btn(false) + '</div>';
+      } else {
+        mark = '<div class="mark-row"><span class="muted">' + ik.rel(o) + '</span>' + btn(true) + '</div>';
+      }
+      return '<td class="date" data-k="date">' + F.short(o.due) + '</td>' + name +
+        '<td class="sum ruled" data-k="sum">' + F.num(o.amount) + ' ' + F.sign(o.currency) + '</td>' +
+        '<td class="mark" data-k="mark">' + mark + '</td>';
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Итоги — Invoice Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Mono&family=PT+Sans:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .cur-name { font: 700 19px/1.1 var(--f-serif); }
+  .cur-name small { display: block; font: 400 13px/1.3 var(--f-sans); color: var(--ink-2); }
+  .ledger td.bar-cell { width: 200px; }
+  .budget-form .input { max-width: 180px; min-width: 0; text-align: right; }
+  .budget-form .ledger { table-layout: fixed; }
+  .scroll-x { overflow-x: auto; }
+  .over-mark { color: var(--red); margin-right: 4px; }
+  .cards { display: none; }
+  @media (max-width: 760px) {
+    .totals-table { display: none; }
+    .cards { display: grid; gap: 0; }
+    .cards .acct dl { row-gap: 4px; }
+  }
+  .two { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 56px; }
+  .two > * { min-width: 0; }
+  @media (max-width: 1100px) { .two { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+</style>
+</head>
+<body data-page="summary">
+<div id="shell"></div>
+
+<main id="main" class="page" x-data="summary" tabindex="-1">
+  <div class="page-head"><h1>Итоги</h1></div>
+
+  <form class="filters" @submit.prevent aria-label="Период итогов">
+    <div class="grp"><span id="s-mode">Период</span>
+      <div class="seg" role="group" aria-labelledby="s-mode">
+        <button type="button" :aria-pressed="mode === 'month'" @click="mode = 'month'">Месяц</button>
+        <button type="button" :aria-pressed="mode === 'year'" @click="mode = 'year'">Год</button>
+        <button type="button" :aria-pressed="mode === 'custom'" @click="mode = 'custom'">Свои даты</button>
+      </div></div>
+    <div class="field" x-show="mode === 'month'"><label for="s-month">Месяц</label>
+      <select class="select" id="s-month" x-model="ym"><template x-for="m in months" :key="m"><option :value="m" x-text="F.month(m)" :selected="m === ym"></option></template></select></div>
+    <div class="field" x-show="mode === 'year'"><label for="s-year">Год</label>
+      <select class="select" id="s-year" x-model="year"><option value="2026">2026</option></select></div>
+    <div class="field" x-show="mode === 'custom'"><label for="s-from">С</label><input class="input mono" id="s-from" type="date" x-model="cf"></div>
+    <div class="field" x-show="mode === 'custom'"><label for="s-to">по</label><input class="input mono" id="s-to" type="date" x-model="ct"></div>
+    <div class="field"><label for="s-asof">Итоги на дату</label><input class="input mono" id="s-asof" type="date" x-model="asOf" aria-describedby="s-asof-h"><span class="hint" id="s-asof-h">Оплачено — по фактическим датам не позже этой.</span></div>
+  </form>
+
+  <h2 class="section-title" style="margin-top:22px" x-text="rangeTitle"></h2>
+  <p class="small muted" style="margin:-6px 0 8px">Каждая валюта считается отдельно, без курсов и конвертации.</p>
+  <div class="cards" aria-label="Итоги по валютам">
+    <template x-for="t in totals" :key="t.currency">
+      <div class="acct">
+        <div class="acct-head"><b x-text="t.name"></b><span x-text="F.sign(t.currency)" aria-hidden="true"></span></div>
+        <dl>
+          <dt>План</dt><dd x-text="F.num(t.planned)"></dd>
+          <dt>Оплачено</dt><dd x-text="F.num(t.paid)"></dd>
+          <dt>К оплате</dt><dd class="strong" x-text="F.num(t.unpaid)"></dd>
+          <dt :class="t.overdue && 'red'">Просрочено</dt><dd :class="t.overdue && 'red'" x-text="F.num(t.overdue)"></dd>
+          <dt>С опозданием</dt><dd x-text="F.num(t.late)"></dd>
+          <dt>Периодов оплачено</dt><dd x-text="t.countPaid + ' из ' + t.count"></dd>
+          <template x-if="budget(t.currency)"><dt>Бюджет</dt></template>
+          <template x-if="budget(t.currency)"><dd x-text="F.num(budget(t.currency)) + (t.planned > budget(t.currency) ? ' — план выше на ' + F.num(t.planned - budget(t.currency)) : '')"></dd></template>
+        </dl>
+      </div>
+    </template>
+  </div>
+  <table class="ledger stack totals-table">
+    <caption class="sr-only">Итоги по валютам</caption>
+    <thead><tr><th scope="col">Валюта</th><th scope="col" class="r">План</th><th scope="col" class="r">Оплачено</th><th scope="col" class="r">К оплате</th><th scope="col" class="r">Просрочено</th><th scope="col" class="r">С опозданием</th><th scope="col" class="r">Периодов</th><th scope="col" class="r">Бюджет</th><th scope="col">Исполнение</th></tr></thead>
+    <tbody>
+      <template x-for="t in totals" :key="t.currency">
+        <tr>
+          <td data-k="name"><span class="cur-name" x-text="t.currency"></span><span class="name-sub" x-text="t.name"></span></td>
+          <td class="sum" data-k="sum" x-text="F.num(t.planned)"></td>
+          <td class="sum" data-k="hide-sm" x-text="F.num(t.paid)"></td>
+          <td class="sum strong" data-k="hide-sm" x-text="F.num(t.unpaid)"></td>
+          <td class="sum" data-k="hide-sm" :class="t.overdue && 'red'" x-text="F.num(t.overdue)"></td>
+          <td class="sum" data-k="hide-sm" :class="t.late && 'amber'" x-text="F.num(t.late)"></td>
+          <td class="sum" data-k="hide-sm" x-text="t.countPaid + ' из ' + t.count"></td>
+          <td class="sum" data-k="hide-sm" x-text="budget(t.currency) ? F.num(budget(t.currency)) : '—'"></td>
+          <td class="bar-cell" data-k="mark">
+            <template x-if="budget(t.currency)"><div>
+              <div class="bar" role="img" :aria-label="'Оплачено ' + pct(t.paid, t.currency) + ' % бюджета, запланировано ' + pct(t.planned, t.currency) + ' %'">
+                <div class="fill" :class="t.paid > budget(t.currency) && 'over'" :style="'width:' + Math.min(100, pct(t.paid, t.currency)) + '%'"></div>
+                <div class="cap" :style="'left:' + Math.min(99.5, pct(t.planned, t.currency)) + '%'"></div></div>
+              <p class="bar-cap"><span x-text="'оплачено ' + pct(t.paid, t.currency) + ' %'"></span>
+                <span :class="t.planned > budget(t.currency) && 'red'" x-text="t.planned > budget(t.currency) ? 'план выше на ' + F.num(t.planned - budget(t.currency)) : 'свободно ' + F.num(budget(t.currency) - t.planned)"></span></p>
+            </div></template>
+            <span class="muted small" x-show="!budget(t.currency)">Бюджет есть только на месяц и год</span>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  <p class="small muted" style="margin-top:10px">«Просрочено» — не оплачено, срок прошёл. «С опозданием» — оплачено позже срока.</p>
+
+  <div class="two">
+    <section aria-labelledby="b-t">
+      <h2 id="b-t" class="section-title">Бюджеты</h2>
+      <form class="budget-form" @submit.prevent="saveBudgets()" novalidate>
+        <table class="ledger">
+          <thead><tr><th scope="col">Валюта</th><th scope="col" class="r">На месяц</th><th scope="col" class="r">На год</th></tr></thead>
+          <tbody>
+            <template x-for="c in ['RUB', 'USD', 'EUR']" :key="c">
+              <tr><th scope="row" style="font-weight:700;border-bottom:1px solid var(--rule)" x-text="c"></th>
+                <td class="r"><template x-if="$store.ik.isAdmin"><input class="input mono" inputmode="decimal" :aria-label="'Бюджет на месяц, ' + c" x-model="b.month[c]" style="margin-left:auto"></template>
+                  <span class="mono" x-show="!$store.ik.isAdmin" x-text="F.num($store.ik.budgets.month[c])"></span></td>
+                <td class="r"><template x-if="$store.ik.isAdmin"><input class="input mono" inputmode="decimal" :aria-label="'Бюджет на год, ' + c" x-model="b.year[c]" style="margin-left:auto"></template>
+                  <span class="mono" x-show="!$store.ik.isAdmin" x-text="F.num($store.ik.budgets.year[c])"></span></td></tr>
+            </template>
+          </tbody>
+        </table>
+        <p class="err small red" style="margin-top:8px" x-text="bErr" role="alert" x-show="bErr"></p>
+        <div class="btn-row" style="margin-top:14px" x-show="$store.ik.isAdmin"><button class="btn primary" type="submit">Сохранить бюджеты</button></div>
+        <p class="small muted" style="margin-top:10px" x-show="!$store.ik.isAdmin">Бюджеты меняет администратор.</p>
+      </form>
+    </section>
+
+    <section aria-labelledby="pl-t">
+      <h2 id="pl-t" class="section-title">Плановые расходы</h2>
+      <p class="small muted" style="margin-bottom:8px">По действующим платежам, на полгода вперёд. Прекращённые не учитываются.</p>
+      <div class="scroll-x"><table class="ledger">
+        <thead><tr><th scope="col">Месяц</th><th scope="col" class="r">RUB</th><th scope="col" class="r">USD</th><th scope="col" class="r">EUR</th></tr></thead>
+        <tbody>
+          <template x-for="r in plan" :key="r.ym">
+            <tr><th scope="row" style="font-weight:400;text-align:left;border-bottom:1px solid var(--rule)" x-text="F.month(r.ym)"></th>
+              <template x-for="c in ['RUB', 'USD', 'EUR']" :key="c"><td class="sum" :class="r[c] > $store.ik.budgets.month[c] && 'red'"><span class="over-mark" x-show="r[c] > $store.ik.budgets.month[c]" aria-hidden="true">▲</span><span x-text="F.num(r[c])"></span><span class="sr-only" x-show="r[c] > $store.ik.budgets.month[c]">, выше бюджета</span></td></template></tr>
+          </template>
+          <tr><th scope="row" style="text-align:left;border-bottom:0">Итого</th>
+            <template x-for="c in ['RUB', 'USD', 'EUR']" :key="c"><td class="sum strong" style="border-bottom:0" x-text="F.num(plan.reduce((s, r) => s + r[c], 0))"></td></template></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin-top:8px"><span class="over-mark" aria-hidden="true">▲</span>— месяц, где план выше месячного бюджета.</p>
+    </section>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/ui.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('summary', () => ({
+    mode: 'month', ym: '2026-10', year: '2026', cf: '2026-10-01', ct: '2026-11-30', asOf: window.IKD.TODAY,
+    months: ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12'],
+    b: { month: {}, year: {} }, bErr: '',
+    init() { const b = this.$store.ik.budgets; this.b = { month: {}, year: {} }; ['month', 'year'].forEach((k) => ['RUB', 'USD', 'EUR'].forEach((c) => { this.b[k][c] = F.num(b[k][c]); })); },
+    get range() {
+      const D = window.IKD;
+      if (this.mode === 'year') return [this.year + '-01-01', this.year + '-12-31'];
+      if (this.mode === 'custom') return [this.cf, this.ct];
+      return [this.ym + '-01', this.ym + '-' + D.lastDay(+this.ym.slice(0, 4), +this.ym.slice(5, 7))];
+    },
+    get rangeTitle() {
+      if (this.mode === 'year') return 'Итоги за ' + this.year + ' год на ' + F.long(this.asOf);
+      if (this.mode === 'custom') return 'Итоги за ' + F.date(this.cf) + '–' + F.date(this.ct) + ' на ' + F.long(this.asOf);
+      return 'Итоги за ' + F.monthOnly(this.ym).toLowerCase() + ' на ' + F.long(this.asOf);
+    },
+    get totals() { return this.$store.ik.totals(this.range[0], this.range[1], this.asOf); },
+    budget(c) { return this.mode === 'year' ? this.$store.ik.budgets.year[c] : this.mode === 'month' ? this.$store.ik.budgets.month[c] : 0; },
+    pct(v, c) { return Math.round(v / this.budget(c) * 100); },
+    get plan() {
+      const D = window.IKD, ik = this.$store.ik, rows = [];
+      for (let i = 1; i <= 6; i++) {
+        const m = 10 + i, y = 2026 + Math.floor((m - 1) / 12), mm = ((m - 1) % 12) + 1;
+        const ym = y + '-' + String(mm).padStart(2, '0'), from = ym + '-01', to = ym + '-' + D.lastDay(y, mm);
+        const row = { ym, RUB: 0, USD: 0, EUR: 0 };
+        ik.payments.filter((p) => !p.deleted).forEach((p) => {
+          for (let n = 0; n < 400; n++) {
+            const due = D.dueDate(p.first, p.period, n);
+            if (due > to || (p.end && due > p.end)) break;
+            if (due >= from) row[p.currency] += p.amount;
+          }
+        });
+        rows.push(row);
+      }
+      return rows;
+    },
+    saveBudgets() {
+      const ok = (v) => /^\d+([.,]\d{1,2})?$/.test(String(v).replace(/\s/g, '')) && +String(v).replace(/\s/g, '').replace(',', '.') > 0;
+      const bad = ['month', 'year'].flatMap((k) => ['RUB', 'USD', 'EUR'].filter((c) => !ok(this.b[k][c])).map((c) => (k === 'month' ? 'на месяц ' : 'на год ') + c));
+      if (bad.length) { this.bErr = 'Введите сумму больше нуля в полях: ' + bad.join(', ') + '.'; return; }
+      this.bErr = '';
+      ['month', 'year'].forEach((k) => ['RUB', 'USD', 'EUR'].forEach((c) => { this.$store.ik.budgets[k][c] = +String(this.b[k][c]).replace(/\s/g, '').replace(',', '.'); }));
+      this.$store.ik.save();
+      this.$store.ik.toast('Бюджеты сохранены.');
+    },
+  }));
+});
+</script>
+<script src="vendor/alpine.min.js"></script>
+</body>
+</html>
