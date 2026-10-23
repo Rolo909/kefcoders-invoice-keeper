@@ -1,0 +1,7 @@
+# .lattice/config.yaml -- Lattice Framework Configuration
+# All paths are relative to the repository root.
+# Runs on built-in defaults until customized -- refiner interviews are optional (see docs/configuration.md).
+
+version: 1
+# language: not detected yet -- set once the stack is chosen (e.g. typescript, go, python)
+paths: {}
