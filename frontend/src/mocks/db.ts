@@ -7,20 +7,18 @@ import type { Channel, Currency, NotificationKind, OccurrenceState, Role } from 
 export const TIMEZONE = 'Europe/Moscow';
 export const REMIND_DAYS = 3;
 export const HORIZON_DAYS = 60;
-const STORAGE_KEY = 'ik-mock-db-v2';
+const STORAGE_KEY = 'ik-mock-db-v1';
 
-export interface DbTeam { id: string; name: string; telegram_chat_id: string | null; created_at: string }
 export interface DbUser {
   id: string; login: string; password: string; full_name: string | null; email: string | null; role: Role;
-  is_system: boolean; team_id: string | null; telegram_linked: boolean; notify_email: boolean; created_at: string;
+  is_system: boolean; telegram_linked: boolean; notify_email: boolean; created_at: string;
 }
-/** team_id = null — общий платёж: у каждой команды свои периоды и своя отметка об оплате. */
 export interface DbPayment {
   id: string; name: string; description: string | null; amount: string; currency: Currency; period: Period;
-  first_due_date: ISODate; end_date: ISODate | null; team_id: string | null; is_active: boolean; deleted_at: string | null; created_by: string; created_at: string;
+  first_due_date: ISODate; end_date: ISODate | null; is_active: boolean; deleted_at: string | null; created_by: string; created_at: string;
 }
 export interface DbOccurrence {
-  id: string; recurring_payment_id: string; team_id: string; seq: number; due_date: ISODate; amount: string; currency: Currency;
+  id: string; recurring_payment_id: string; seq: number; due_date: ISODate; amount: string; currency: Currency;
   status: 'paid' | 'unpaid'; paid_date: ISODate | null; paid_by: string | null; paid_marked_at: string | null; note: string | null;
 }
 export interface DbNotification {
@@ -35,11 +33,10 @@ export interface DbAudit {
   id: string; at: string; actor_id: string | null; actor_login: string; action: string;
   entity_type: string | null; entity_id: string | null; details: Record<string, string | number | boolean | null>; ip: string | null;
 }
-export interface DbBudget { team_id: string; currency: Currency; period_type: 'month' | 'year'; year: number; month: number | null; amount: string }
+export interface DbBudget { currency: Currency; period_type: 'month' | 'year'; year: number; month: number | null; amount: string }
 
 export interface Db {
-  version: 2;
-  teams: DbTeam[];
+  version: 1;
   users: DbUser[];
   payments: DbPayment[];
   occurrences: DbOccurrence[];
@@ -73,35 +70,22 @@ export function daysOverdue(o: DbOccurrence, t: ISODate) {
 export const isOverdue = (o: DbOccurrence, t: ISODate) =>
   o.status === 'paid' && o.paid_date ? o.paid_date > o.due_date : t > o.due_date;
 
-/** Кто платит: команда платежа или, для общего платежа, каждая команда. */
-export const payingTeams = (db: Db, p: DbPayment) => (p.team_id ? db.teams.filter((x) => x.id === p.team_id) : db.teams);
-
-/** Команда, созданная позже платежа, получает его со дня создания — без долгов за прошлые сроки. */
-export function teamStart(p: DbPayment, team: DbTeam): ISODate | null {
-  const joined = team.created_at.slice(0, 10);
-  return joined > p.created_at.slice(0, 10) ? joined : null;
-}
-
 export function ensureOccurrences(db: Db, p: DbPayment, t: ISODate) {
   if (p.deleted_at || !p.is_active) return;
+  const mine = db.occurrences.filter((o) => o.recurring_payment_id === p.id);
   const limit = addDays(t, HORIZON_DAYS);
-  for (const team of payingTeams(db, p)) {
-    const mine = db.occurrences.filter((o) => o.recurring_payment_id === p.id && o.team_id === team.id);
-    const start = teamStart(p, team);
-    for (let n = 0; n < 2000; n++) {
-      const due = dueDate(p.first_due_date, p.period, n);
-      if (p.end_date && due > p.end_date) break;
-      if (start && due < start) continue;
-      const hasFuture = mine.some((o) => o.due_date > t);
-      if (due > limit && hasFuture) break;
-      if (!mine.some((o) => o.seq === n)) {
-        const occ: DbOccurrence = {
-          id: uid(), recurring_payment_id: p.id, team_id: team.id, seq: n, due_date: due, amount: p.amount, currency: p.currency,
-          status: 'unpaid', paid_date: null, paid_by: null, paid_marked_at: null, note: null,
-        };
-        db.occurrences.push(occ);
-        mine.push(occ);
-      }
+  for (let n = 0; n < 2000; n++) {
+    const due = dueDate(p.first_due_date, p.period, n);
+    if (p.end_date && due > p.end_date) break;
+    const hasFuture = mine.some((o) => o.due_date > t);
+    if (due > limit && hasFuture) break;
+    if (!mine.some((o) => o.seq === n)) {
+      const occ: DbOccurrence = {
+        id: uid(), recurring_payment_id: p.id, seq: n, due_date: due, amount: p.amount, currency: p.currency,
+        status: 'unpaid', paid_date: null, paid_by: null, paid_marked_at: null, note: null,
+      };
+      db.occurrences.push(occ);
+      mine.push(occ);
     }
   }
 }
@@ -111,11 +95,10 @@ function scheduled(time: string) {
 }
 
 export function dispatchReminders(db: Db, t: ISODate) {
-  // Письма — только участникам команды периода.
-  const emailTeams = new Set(db.users.filter((u) => u.notify_email && u.email).map((u) => u.team_id));
+  const emailOn = db.users.some((u) => u.notify_email && u.email);
+  const channels: Channel[] = emailOn ? ['telegram', 'email', 'inapp'] : ['telegram', 'inapp'];
   for (const o of db.occurrences) {
     if (o.status === 'paid') continue;
-    const channels: Channel[] = emailTeams.has(o.team_id) ? ['telegram', 'email', 'inapp'] : ['telegram', 'inapp'];
     const p = db.payments.find((x) => x.id === o.recurring_payment_id);
     if (!p || p.deleted_at) continue;
     const left = diffDays(t, o.due_date);
@@ -146,15 +129,12 @@ export function refresh(db: Db) {
 }
 
 export function plannedInRange(db: Db, from: ISODate, to: ISODate) {
-  const out: { payment: DbPayment; team: DbTeam; due: ISODate }[] = [];
+  const out: { payment: DbPayment; due: ISODate }[] = [];
   for (const p of db.payments) {
     if (p.deleted_at || !p.is_active) continue;
-    for (const team of payingTeams(db, p)) {
-      const materialized = new Set(db.occurrences.filter((o) => o.recurring_payment_id === p.id && o.team_id === team.id).map((o) => o.due_date));
-      const start = teamStart(p, team);
-      for (const due of datesInRange(p.first_due_date, p.period, from, to, p.end_date)) {
-        if (!materialized.has(due) && (!start || due >= start)) out.push({ payment: p, team, due });
-      }
+    const materialized = new Set(db.occurrences.filter((o) => o.recurring_payment_id === p.id).map((o) => o.due_date));
+    for (const due of datesInRange(p.first_due_date, p.period, from, to, p.end_date)) {
+      if (!materialized.has(due)) out.push({ payment: p, due });
     }
   }
   return out;
@@ -174,7 +154,7 @@ export function load(): Db {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const db = JSON.parse(raw) as Db;
-      if (db.version === 2) return db;
+      if (db.version === 1) return db;
     }
   } catch {
     // storage unavailable or corrupt: start from seed
@@ -204,43 +184,30 @@ export function reset() {
 
 function seed(): Db {
   const T = today();
-  const db: Db = { version: 2, teams: [], users: [], payments: [], occurrences: [], notifications: [], reads: [], attachments: [], audit: [], budgets: [] };
-
-  const team = (name: string, telegram_chat_id: string | null, createdDaysAgo: number): DbTeam => {
-    const x: DbTeam = { id: uid(), name, telegram_chat_id, created_at: at(addDays(T, -createdDaysAgo), '10:00') };
-    db.teams.push(x);
-    return x;
-  };
-  const kef = team('Kefcoders', '-1002233445566', 200);
-  const studio = team('Студия дизайна', '-1009988776655', 100);
+  const db: Db = { version: 1, users: [], payments: [], occurrences: [], notifications: [], reads: [], attachments: [], audit: [], budgets: [] };
 
   const user = (login: string, password: string, full_name: string | null, extra: Partial<DbUser> = {}): DbUser => {
     const u: DbUser = {
-      id: uid(), login, password, full_name, email: null, role: 'user', is_system: false, team_id: kef.id,
+      id: uid(), login, password, full_name, email: null, role: 'user', is_system: false,
       telegram_linked: false, notify_email: false, created_at: at(addDays(T, -140)), ...extra,
     };
     db.users.push(u);
     return u;
   };
-  const admin = user('admin', 'admin12345', 'Администратор', { role: 'admin', is_system: true, team_id: null });
+  const admin = user('admin', 'admin12345', 'Администратор', { role: 'admin', is_system: true });
   const anna = user('anna', 'anna12345', 'Анна Ковалёва', { email: 'anna@kefcoders.ru', telegram_linked: true, notify_email: true });
   const maria = user('maria', 'maria12345', 'Мария Лебедева', { email: 'maria@kefcoders.ru', telegram_linked: true });
   user('user', 'user12345', 'Дмитрий Орлов', { created_at: at(addDays(T, -100)) });
-  const oleg = user('oleg', 'oleg12345', 'Олег Смирнов', { team_id: studio.id, email: 'oleg@studio.ru', telegram_linked: true, created_at: at(addDays(T, -99)) });
 
-  type Paid = (seq: number, due: ISODate, team: DbTeam) => [ISODate, DbUser] | null;
   type Spec = {
     name: string; description: string; amount: string; currency: Currency; period: Period; first: ISODate;
-    team: DbTeam | null; paid?: Paid; deletedAt?: ISODate; createdAt?: ISODate;
+    paid?: (seq: number, due: ISODate) => [ISODate, DbUser] | null; deletedAt?: ISODate; createdAt?: ISODate;
   };
   const back = (due: ISODate, period: Period, k: number) => dueDate(due, period, -k);
   const monthly = (currentDue: ISODate, past: number) => back(currentDue, 'monthly', past);
-  const crew = (x: DbTeam) => (x === kef ? [anna, maria] : [oleg]);
-  // Без списка — отмечает тот, кто есть в команде периода (для общих платежей).
-  const paidBefore = (shift: number, who?: DbUser[]): Paid => (seq, due, x) => {
+  const paidBefore = (shift: number, who: DbUser[]) => (seq: number, due: ISODate): [ISODate, DbUser] | null => {
     const d = addDays(due, shift);
-    const list = who ?? crew(x);
-    return d <= T ? [d, list[seq % list.length]] : null;
+    return d <= T ? [d, who[seq % who.length]] : null;
   };
 
   const figmaAnchor = (() => {
@@ -255,44 +222,37 @@ function seed(): Db {
   })();
 
   const specs: Spec[] = [
-    { name: 'Аренда офиса', description: 'Офис на Пушкинской, 12. Договор № 14/2025, оплата до 26-го числа.', amount: '50000.00', currency: 'RUB', period: 'monthly', team: kef,
-      first: monthly(addDays(T, 2), 4), paid: (seq, due, x) => (due < addDays(T, 2) ? paidBefore(-1, [anna, maria])(seq, due, x) : null) },
-    // Общий: каждая команда платит свой счёт. Студия не оплатила прошлый месяц — видно, что отметки у команд раздельные.
-    { name: 'Бухгалтерское сопровождение', description: 'ООО «Баланс-Сервис», ежемесячный счёт каждой команде.', amount: '25000.00', currency: 'RUB', period: 'monthly', team: null,
-      first: monthly(addDays(T, 1), 4), paid: (seq, due, x) => (due < addDays(T, 1) && (x === kef || due < addDays(T, -40)) ? paidBefore(-1)(seq, due, x) : null) },
-    { name: 'МТС Бизнес, интернет', description: 'Лицевой счёт 7712 0045 8810.', amount: '3900.00', currency: 'RUB', period: 'monthly', team: kef,
+    { name: 'Аренда офиса', description: 'Офис на Пушкинской, 12. Договор № 14/2025, оплата до 26-го числа.', amount: '50000.00', currency: 'RUB', period: 'monthly',
+      first: monthly(addDays(T, 2), 4), paid: (seq, due) => (due < addDays(T, 2) ? paidBefore(-1, [anna, maria])(seq, due) : null) },
+    { name: 'Бухгалтерское сопровождение', description: 'ООО «Баланс-Сервис», ежемесячный счёт.', amount: '25000.00', currency: 'RUB', period: 'monthly',
+      first: monthly(addDays(T, 1), 4), paid: (seq, due) => (due < addDays(T, 1) ? paidBefore(-1, [anna])(seq, due) : null) },
+    { name: 'МТС Бизнес, интернет', description: 'Лицевой счёт 7712 0045 8810.', amount: '3900.00', currency: 'RUB', period: 'monthly',
       first: monthly(addDays(T, -4), 4), paid: paidBefore(-1, [maria, anna]) },
-    { name: 'Яндекс 360 для бизнеса', description: 'Почта и диск, каждая команда платит за свои места.', amount: '2400.00', currency: 'RUB', period: 'monthly', team: null,
-      first: monthly(addDays(T, -23), 3), paid: paidBefore(0) },
-    { name: 'Страхование офиса', description: 'Полис «Ингосстрах» № 0471-2026.', amount: '38000.00', currency: 'RUB', period: 'quarterly', team: kef,
-      first: back(addDays(T, 38), 'quarterly', 2), paid: (seq, due, x) => (due < T ? paidBefore(-2, [anna])(seq, due, x) : null) },
-    { name: 'Домен invoicekeeper.ru', description: 'Продление у регистратора REG.RU.', amount: '1500.00', currency: 'RUB', period: 'yearly', team: kef, first: addDays(T, 20) },
-    { name: 'Сервер DigitalOcean', description: 'Droplet 4 vCPU / 8 GB, продакшен.', amount: '20.00', currency: 'USD', period: 'monthly', team: kef,
-      first: monthly(addDays(T, -10), 3), paid: (seq, due, x) => (due < addDays(T, -10) ? paidBefore(0, [maria])(seq, due, x) : null) },
-    { name: 'Sentry Team', description: 'Мониторинг ошибок, 50 тыс. событий.', amount: '26.00', currency: 'USD', period: 'monthly', team: kef,
-      first: monthly(addDays(T, -6), 3), paid: (seq, due, x) => (due < addDays(T, -6) ? paidBefore(-1, [maria])(seq, due, x) : null) },
-    { name: 'GitHub Team', description: '11 мест, организация kefcoders.', amount: '44.00', currency: 'USD', period: 'monthly', team: kef,
+    { name: 'Яндекс 360 для бизнеса', description: 'Почта и диск, 8 пользователей.', amount: '2400.00', currency: 'RUB', period: 'monthly',
+      first: monthly(addDays(T, -23), 3), paid: paidBefore(0, [anna, maria]) },
+    { name: 'Страхование офиса', description: 'Полис «Ингосстрах» № 0471-2026.', amount: '38000.00', currency: 'RUB', period: 'quarterly',
+      first: back(addDays(T, 38), 'quarterly', 2), paid: (seq, due) => (due < T ? paidBefore(-2, [anna])(seq, due) : null) },
+    { name: 'Домен invoicekeeper.ru', description: 'Продление у регистратора REG.RU.', amount: '1500.00', currency: 'RUB', period: 'yearly', first: addDays(T, 20) },
+    { name: 'Сервер DigitalOcean', description: 'Droplet 4 vCPU / 8 GB, продакшен.', amount: '20.00', currency: 'USD', period: 'monthly',
+      first: monthly(addDays(T, -10), 3), paid: (seq, due) => (due < addDays(T, -10) ? paidBefore(0, [maria])(seq, due) : null) },
+    { name: 'Sentry Team', description: 'Мониторинг ошибок, 50 тыс. событий.', amount: '26.00', currency: 'USD', period: 'monthly',
+      first: monthly(addDays(T, -6), 3), paid: (seq, due) => (due < addDays(T, -6) ? paidBefore(-1, [maria])(seq, due) : null) },
+    { name: 'GitHub Team', description: '11 мест, организация kefcoders.', amount: '44.00', currency: 'USD', period: 'monthly',
       first: monthly(addDays(T, -2), 3), paid: paidBefore(0, [maria]) },
-    { name: 'AWS', description: 'S3 и CloudFront для файлов клиентов.', amount: '134.20', currency: 'USD', period: 'monthly', team: kef, first: addDays(T, 4), createdAt: addDays(T, -1) },
-    { name: 'JetBrains All Products', description: 'Лицензия на команду, 3 места.', amount: '28.90', currency: 'EUR', period: 'monthly', team: kef,
+    { name: 'AWS', description: 'S3 и CloudFront для файлов клиентов.', amount: '134.20', currency: 'USD', period: 'monthly', first: addDays(T, 4), createdAt: addDays(T, -1) },
+    { name: 'JetBrains All Products', description: 'Лицензия на команду, 3 места.', amount: '28.90', currency: 'EUR', period: 'monthly',
       first: monthly(addDays(T, -19), 3), paid: paidBefore(0, [anna]) },
-    { name: 'Figma Professional', description: 'Оплата 31-го; в коротких месяцах — в последний день.', amount: '15.00', currency: 'EUR', period: 'monthly', team: kef,
-      first: figmaAnchor, paid: (seq, due, x) => (seq < 2 ? paidBefore(0, [maria])(seq, due, x) : seq === 2 ? paidBefore(3, [maria])(seq, due, x) : null) },
-    { name: 'Хостинг Timeweb', description: 'Старый сервер, переехали на DigitalOcean.', amount: '1290.00', currency: 'RUB', period: 'monthly', team: kef,
+    { name: 'Figma Professional', description: 'Оплата 31-го; в коротких месяцах — в последний день.', amount: '15.00', currency: 'EUR', period: 'monthly',
+      first: figmaAnchor, paid: (seq, due) => (seq < 2 ? paidBefore(0, [maria])(seq, due) : seq === 2 ? paidBefore(3, [maria])(seq, due) : null) },
+    { name: 'Хостинг Timeweb', description: 'Старый сервер, переехали на DigitalOcean.', amount: '1290.00', currency: 'RUB', period: 'monthly',
       first: monthly(addDays(T, -75), 4), paid: paidBefore(0, [anna]), deletedAt: addDays(T, -70) },
-    { name: 'Аренда студии', description: 'Лофт на Садовой, 5. Договор № 7/2026.', amount: '35000.00', currency: 'RUB', period: 'monthly', team: studio,
-      first: monthly(addDays(T, 6), 2), paid: (seq, due, x) => (due < T ? paidBefore(-2)(seq, due, x) : null) },
-    { name: 'Adobe Creative Cloud', description: 'Все приложения, 2 места.', amount: '89.99', currency: 'EUR', period: 'monthly', team: studio,
-      first: monthly(addDays(T, -2), 2), paid: (seq, due, x) => (due < addDays(T, -2) ? paidBefore(0)(seq, due, x) : null) },
-    { name: 'Shutterstock', description: 'Фотобанк, 750 изображений в месяц.', amount: '29.00', currency: 'USD', period: 'monthly', team: studio,
-      first: monthly(addDays(T, 12), 2), paid: paidBefore(-1) },
   ];
 
   const byName: Record<string, DbPayment> = {};
   for (const s of specs) {
     const p: DbPayment = {
       id: uid(), name: s.name, description: s.description, amount: s.amount, currency: s.currency, period: s.period,
-      first_due_date: s.first, end_date: null, team_id: s.team?.id ?? null, is_active: !s.deletedAt, deleted_at: null, created_by: admin.id,
+      first_due_date: s.first, end_date: null, is_active: !s.deletedAt, deleted_at: null, created_by: admin.id,
       created_at: at(s.createdAt ?? addDays(s.first, -25), '11:00'),
     };
     db.payments.push(p);
@@ -301,7 +261,7 @@ function seed(): Db {
       for (let n = 0; n < 60; n++) {
         const due = dueDate(p.first_due_date, p.period, n);
         if (due > s.deletedAt) break;
-        db.occurrences.push({ id: uid(), recurring_payment_id: p.id, team_id: s.team!.id, seq: n, due_date: due, amount: p.amount, currency: p.currency,
+        db.occurrences.push({ id: uid(), recurring_payment_id: p.id, seq: n, due_date: due, amount: p.amount, currency: p.currency,
           status: 'unpaid', paid_date: null, paid_by: null, paid_marked_at: null, note: null });
       }
       p.deleted_at = at(s.deletedAt, '11:00');
@@ -309,7 +269,7 @@ function seed(): Db {
       ensureOccurrences(db, p, T);
     }
     for (const o of db.occurrences.filter((x) => x.recurring_payment_id === p.id)) {
-      const mark = s.paid?.(o.seq, o.due_date, db.teams.find((x) => x.id === o.team_id)!);
+      const mark = s.paid?.(o.seq, o.due_date);
       if (mark) {
         o.status = 'paid';
         o.paid_date = mark[0];
@@ -320,7 +280,7 @@ function seed(): Db {
   }
 
   const occOf = (name: string, pick: (list: DbOccurrence[]) => DbOccurrence | undefined) =>
-    pick(db.occurrences.filter((o) => o.recurring_payment_id === byName[name].id && o.team_id === kef.id).sort((a, b) => a.due_date.localeCompare(b.due_date)));
+    pick(db.occurrences.filter((o) => o.recurring_payment_id === byName[name].id).sort((a, b) => a.due_date.localeCompare(b.due_date)));
   const lastPaid = (name: string) => occOf(name, (l) => [...l].reverse().find((o) => o.status === 'paid'));
 
   const mts = lastPaid('МТС Бизнес, интернет');
@@ -364,21 +324,16 @@ function seed(): Db {
   if (figmaLate) log(at(figmaLate.paid_date!, '17:44'), maria, 'occurrence.mark_paid', ['occurrence', figmaLate.id], occDetails(figmaLate, { paid_date: figmaLate.paid_date }), '93.80.41.15');
   log(byName['Хостинг Timeweb'].deleted_at!, admin, 'payment.delete', ['recurring_payment', byName['Хостинг Timeweb'].id], { payment_name: 'Хостинг Timeweb' }, '85.140.12.3');
   log(at(addDays(T, -100), '10:15'), admin, 'user.create', ['user', db.users[3].id], { login: 'user', full_name: 'Дмитрий Орлов' }, '85.140.12.3');
-  log(studio.created_at, admin, 'team.create', ['team', studio.id], { name: studio.name }, '85.140.12.3');
-  log(at(addDays(T, -99), '10:20'), admin, 'user.create', ['user', oleg.id], { login: oleg.login, full_name: oleg.full_name }, '85.140.12.3');
   db.audit.sort((a, b) => b.at.localeCompare(a.at));
 
   const { y, m } = parseISO(T);
-  const budget = (x: DbTeam, currency: Currency, monthAmount: string, yearAmount: string) => {
-    db.budgets.push({ team_id: x.id, currency, period_type: 'month', year: y, month: m, amount: monthAmount });
-    db.budgets.push({ team_id: x.id, currency, period_type: 'year', year: y, month: null, amount: yearAmount });
+  const budget = (currency: Currency, monthAmount: string, yearAmount: string) => {
+    db.budgets.push({ currency, period_type: 'month', year: y, month: m, amount: monthAmount });
+    db.budgets.push({ currency, period_type: 'year', year: y, month: null, amount: yearAmount });
   };
-  budget(kef, 'RUB', '90000.00', '1100000.00');
-  budget(kef, 'USD', '250.00', '3000.00');
-  budget(kef, 'EUR', '60.00', '700.00');
-  budget(studio, 'RUB', '70000.00', '800000.00');
-  budget(studio, 'USD', '40.00', '450.00');
-  budget(studio, 'EUR', '100.00', '1200.00');
+  budget('RUB', '90000.00', '1100000.00');
+  budget('USD', '250.00', '3000.00');
+  budget('EUR', '60.00', '700.00');
 
   dispatchReminders(db, T);
   const inapp = db.notifications.filter((n) => n.channel === 'inapp').sort((a, b) => a.created_at.localeCompare(b.created_at));

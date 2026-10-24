@@ -3,7 +3,6 @@ import { Button, NativeSelect, TextInput } from '@mantine/core';
 import { useBudgets, useSaveBudgets, useSummaries, useSummary } from '../api/hooks';
 import type { Budget, Currency } from '../api/types';
 import { useAuth } from '../auth/context';
-import { useTeamScope } from '../auth/team';
 import { toast } from '../components/dialogs/actions';
 import { monthOf, monthRange, shiftMonth } from '../lib/dates';
 import { CURRENCIES, CURRENCY_NAME, longDate, monthName, monthTitle, num } from '../lib/format';
@@ -11,10 +10,7 @@ import { CURRENCIES, CURRENCY_NAME, longDate, monthName, monthTitle, num } from 
 type Mode = 'month' | 'year' | 'custom';
 
 export function SummaryPage() {
-  const { today, isAdmin, user } = useAuth();
-  const { teamId, current } = useTeamScope();
-  // Бюджет у каждой команды свой: администратор правит его, выбрав команду в шапке.
-  const budgetTeam = isAdmin ? teamId : user?.team?.id ?? null;
+  const { today, isAdmin } = useAuth();
   const cur = monthOf(today);
   const year = Number(today.slice(0, 4));
   const month = Number(today.slice(5, 7));
@@ -42,11 +38,7 @@ export function SummaryPage() {
     setDraft(next);
   }, [budgets.data]);
 
-  // Для всех команд — сумма месячных бюджетов команд, как в итогах.
-  const monthBudget = (c: Currency) => {
-    const list = (budgets.data ?? []).filter((b) => b.currency === c && b.period_type === 'month');
-    return list.length ? list.reduce((s, b) => s + Number(b.amount), 0) : undefined;
-  };
+  const monthBudget = (c: Currency) => budgets.data?.find((b) => b.currency === c && b.period_type === 'month')?.amount;
   const title = mode === 'year' ? `Итоги за ${year} год на ${longDate(asOf || today)}` : mode === 'custom'
     ? `Итоги за ${custom[0].split('-').reverse().join('.')}–${custom[1].split('-').reverse().join('.')} на ${longDate(asOf || today)}`
     : `Итоги за ${monthName(ym).toLowerCase()} на ${longDate(asOf || today)}`;
@@ -59,7 +51,7 @@ export function SummaryPage() {
       for (const c of CURRENCIES) {
         const raw = (draft[`${type}:${c}`] ?? '').replace(/\s/g, '').replace(',', '.');
         if (!/^\d+(\.\d{1,2})?$/.test(raw) || Number(raw) <= 0) bad.push(`${type === 'month' ? 'на месяц' : 'на год'} ${c}`);
-        else items.push({ team_id: budgetTeam!, currency: c, period_type: type, year, month: type === 'month' ? month : null, amount: Number(raw).toFixed(2) });
+        else items.push({ currency: c, period_type: type, year, month: type === 'month' ? month : null, amount: Number(raw).toFixed(2) });
       }
     }
     if (bad.length) return setBErr(`Введите сумму больше нуля в полях: ${bad.join(', ')}.`);
@@ -159,37 +151,31 @@ export function SummaryPage() {
 
       <div className="two">
         <section aria-labelledby="b-t">
-          <h2 id="b-t" className="section-title">Бюджеты на {year} год{current ? ` · ${current.name}` : ''}</h2>
-          {!budgetTeam ? (
-            <p className="muted" style={{ maxWidth: 420 }}>
-              Бюджет задаётся для каждой команды. Выберите команду в шапке, чтобы посмотреть или изменить её бюджет. В итогах выше — сумма бюджетов всех команд.
-            </p>
-          ) : (
-            <form onSubmit={saveBudgets} noValidate>
-              <table className="ledger budget-table">
-                <thead><tr><th scope="col">Валюта</th><th scope="col" className="r">На {monthName(cur).toLowerCase()}</th><th scope="col" className="r">На год</th></tr></thead>
-                <tbody>
-                  {CURRENCIES.map((c) => (
-                    <tr key={c}>
-                      <th scope="row" style={{ fontWeight: 700, borderBottom: '1px solid var(--rule)', textAlign: 'left' }}>{c}</th>
-                      {(['month', 'year'] as const).map((type) => (
-                        <td className="r" key={type}>
-                          {isAdmin ? (
-                            <TextInput aria-label={`Бюджет ${type === 'month' ? 'на месяц' : 'на год'}, ${c}`} inputMode="decimal" value={draft[`${type}:${c}`] ?? ''}
-                              onChange={(e) => { const v = e.currentTarget.value; setDraft((d) => ({ ...d, [`${type}:${c}`]: v })); }} classNames={{ input: 'mono budget-input' }} />
-                          ) : (
-                            <span className="mono">{draft[`${type}:${c}`] ?? '—'}</span>
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {bErr && <p className="ik-error" role="alert" style={{ marginTop: 8 }}>{bErr}</p>}
-              {isAdmin ? <Button type="submit" variant="filled" mt="md" loading={save.isPending}>Сохранить бюджеты</Button> : <p className="small muted" style={{ marginTop: 10 }}>Бюджеты меняет администратор.</p>}
-            </form>
-          )}
+          <h2 id="b-t" className="section-title">Бюджеты на {year} год</h2>
+          <form onSubmit={saveBudgets} noValidate>
+            <table className="ledger budget-table">
+              <thead><tr><th scope="col">Валюта</th><th scope="col" className="r">На {monthName(cur).toLowerCase()}</th><th scope="col" className="r">На год</th></tr></thead>
+              <tbody>
+                {CURRENCIES.map((c) => (
+                  <tr key={c}>
+                    <th scope="row" style={{ fontWeight: 700, borderBottom: '1px solid var(--rule)', textAlign: 'left' }}>{c}</th>
+                    {(['month', 'year'] as const).map((type) => (
+                      <td className="r" key={type}>
+                        {isAdmin ? (
+                          <TextInput aria-label={`Бюджет ${type === 'month' ? 'на месяц' : 'на год'}, ${c}`} inputMode="decimal" value={draft[`${type}:${c}`] ?? ''}
+                            onChange={(e) => { const v = e.currentTarget.value; setDraft((d) => ({ ...d, [`${type}:${c}`]: v })); }} classNames={{ input: 'mono budget-input' }} />
+                        ) : (
+                          <span className="mono">{draft[`${type}:${c}`] ?? '—'}</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {bErr && <p className="ik-error" role="alert" style={{ marginTop: 8 }}>{bErr}</p>}
+            {isAdmin ? <Button type="submit" variant="filled" mt="md" loading={save.isPending}>Сохранить бюджеты</Button> : <p className="small muted" style={{ marginTop: 10 }}>Бюджеты меняет администратор.</p>}
+          </form>
         </section>
 
         <section aria-labelledby="pl-t">
