@@ -441,6 +441,7 @@
   const shell = `
   <a class="skip" href="#main">Перейти к содержимому</a>
   <header class="mast" x-data>
+   <div class="mast-row">
     <a class="brand" href="index.html"><b>Invoice Keeper</b></a>
     <span class="today">${F.weekday(D.TODAY)}, ${F.long(D.TODAY)} 2026</span>
     <div style="position:relative" x-data="bell" @keydown.escape="if(open){open=false;$refs.b.focus()}" @click.outside="open=false" @focusout="if (!$el.contains($event.relatedTarget)) open = false">
@@ -457,12 +458,13 @@
         </template>
       </div>
     </div>
-    <div class="who"><b x-text="$store.ik.me.name"></b><small x-text="$store.ik.isAdmin ? 'логин admin' : $store.ik.me.login + ' · пользователь'"></small></div>
+    <a class="who" href="profile.html"${cur('profile')}><b x-text="$store.ik.me.name"></b><small x-text="'профиль · ' + $store.ik.me.login"></small></a>
     <button class="btn primary" type="button" x-show="$store.ik.isAdmin" @click="$store.dlg.open('newPayment', {}, $event)">Новый платёж</button>
+   </div>
+   <nav class="tabs" aria-label="Разделы">
+    ${NAV.filter(([k]) => k !== 'profile').map(([k, href, label, admin]) => (k === 'users' ? '<span class="gap" aria-hidden="true" x-show="$store.ik.isAdmin"></span>' : '') + `<a href="${href}"${cur(k)}${admin ? ' x-show="$store.ik.isAdmin"' : ''}>${label}</a>`).join('')}
+   </nav>
   </header>
-  <nav class="index" aria-label="Разделы" x-data>
-    ${NAV.map(([k, href, label, admin]) => `<a href="${href}"${cur(k)}${admin ? ' x-show="$store.ik.isAdmin"' : ''}>${label}</a>`).join('')}
-  </nav>
   <nav class="bottom-nav" aria-label="Разделы" x-data>
     ${NAV.filter(([k]) => MOBILE.includes(k)).map(([k, href, label]) => `<a href="${href}"${cur(k)}>${label}</a>`).join('')}
     <div style="position:relative" x-data="{ open: false }" @keydown.escape="if (open) { open = false; $refs.more.focus() }" @click.outside="open = false">
