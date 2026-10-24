@@ -1,0 +1,4 @@
+* text=auto
+# Скрипты запускаются внутри Linux-контейнеров — только LF.
+*.sh text eol=lf
+Dockerfile text eol=lf
