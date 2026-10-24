@@ -1,4 +1,3 @@
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -9,6 +8,7 @@ from app.api.v1 import router as api_v1_router
 from app.config import get_settings
 from app.db import engine, session_factory
 from app.errors import register_error_handlers
+from app.logging_setup import configure_logging
 from app.services.auth import LoginRateLimiter
 from app.services.reminders import ReminderDispatcher, build_notifiers
 
@@ -47,7 +47,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configure_logging(settings.log_level)
 
     app = FastAPI(
         title="Invoice Keeper API",
