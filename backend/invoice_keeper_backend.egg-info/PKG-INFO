@@ -1,0 +1,26 @@
+Metadata-Version: 2.4
+Name: invoice-keeper-backend
+Version: 0.1.0
+Summary: Invoice Keeper — напоминания о регулярных платежах (API, worker, Telegram-бот)
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.32
+Requires-Dist: sqlalchemy[asyncio]>=2.0.36
+Requires-Dist: asyncpg>=0.30
+Requires-Dist: alembic>=1.14
+Requires-Dist: pydantic-settings>=2.6
+Requires-Dist: pwdlib[argon2]>=0.2.1
+Requires-Dist: aiogram>=3.15
+Requires-Dist: apscheduler<4,>=3.10
+Requires-Dist: httpx>=0.28
+Requires-Dist: aiosmtplib>=3.0
+Requires-Dist: python-multipart>=0.0.18
+Requires-Dist: pyyaml>=6.0.2
+Requires-Dist: tzdata>=2024.2
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.24; extra == "dev"
+Requires-Dist: time-machine>=2.16; extra == "dev"
+Requires-Dist: ruff>=0.8; extra == "dev"
+Requires-Dist: mypy>=1.13; extra == "dev"
+Requires-Dist: types-PyYAML>=6.0; extra == "dev"
