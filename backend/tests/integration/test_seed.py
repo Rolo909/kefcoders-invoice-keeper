@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import Currency, OccurrenceState
 from app.domain.status import occurrence_state
-from app.models import Budget, PaymentOccurrence, RecurringPayment, User
+from app.models import Budget, PaymentOccurrence, RecurringPayment, Team, User
 from app.security import verify_password
-from app.seed import DEMO_USERS, seed_demo_data
+from app.seed import DEMO_USERS, KEF, STUDIO, seed_demo_data
 
 TODAY = date(2026, 10, 24)
 TZ = ZoneInfo("Europe/Moscow")
@@ -103,3 +103,66 @@ async def test_budgets_cover_every_currency_for_month_and_year(db_session: Async
 async def test_nothing_is_created_without_admin(db_session: AsyncSession) -> None:
     assert not await seed_demo_data(db_session, today=TODAY, tz=TZ)
     assert await db_session.scalar(select(func.count()).select_from(User)) == 0
+
+
+# ---------- команды ----------
+
+
+async def team_named(session: AsyncSession, name: str) -> Team:
+    team = await session.scalar(select(Team).where(Team.name == name))
+    assert team is not None
+    return team
+
+
+@pytest.mark.usefixtures("seeded")
+async def test_two_teams_with_their_members(db_session: AsyncSession) -> None:
+    rows = await db_session.execute(select(User.login, Team.name).join(Team, Team.id == User.team_id))
+
+    assert sorted((login, team) for login, team in rows.all()) == [
+        ("anna", KEF),
+        ("maria", KEF),
+        ("oleg", STUDIO),
+        ("user", KEF),
+    ]
+
+
+@pytest.mark.usefixtures("seeded")
+async def test_shared_payment_is_paid_by_each_team_separately(db_session: AsyncSession) -> None:
+    studio = await team_named(db_session, STUDIO)
+    accounting = await periods_of(db_session, "Бухгалтерское сопровождение")
+    by_team: dict[str, list[PaymentOccurrence]] = {KEF: [], STUDIO: []}
+    for period in accounting:
+        by_team[STUDIO if period.team_id == studio.id else KEF].append(period)
+
+    # У Студии нет сроков раньше дня её создания — долгов за прошлое нет.
+    assert min(p.due_date for p in by_team[STUDIO]) >= TODAY - timedelta(days=100)
+    assert len(by_team[KEF]) > len(by_team[STUDIO])
+    # Прошлый месяц Kefcoders оплатил, Студия — нет.
+    last_month = TODAY - timedelta(days=30)
+    kef_last = next(p for p in by_team[KEF] if abs((p.due_date - last_month).days) < 5)
+    studio_last = next(p for p in by_team[STUDIO] if abs((p.due_date - last_month).days) < 5)
+    assert states([kef_last, studio_last]) == [OccurrenceState.PAID, OccurrenceState.OVERDUE]
+
+
+@pytest.mark.usefixtures("seeded")
+async def test_studio_has_its_own_payments(db_session: AsyncSession) -> None:
+    studio = await team_named(db_session, STUDIO)
+    rent = await periods_of(db_session, "Аренда студии")
+    adobe = await periods_of(db_session, "Adobe Creative Cloud")
+    stock = await periods_of(db_session, "Shutterstock")
+
+    assert {p.team_id for p in [*rent, *adobe, *stock]} == {studio.id}
+    assert next(p.due_date for p in rent if p.paid_date is None) == TODAY + timedelta(days=6)
+    assert [p.due_date for p, s in zip(adobe, states(adobe), strict=True) if s is OccurrenceState.OVERDUE] == [
+        TODAY - timedelta(days=2)
+    ]
+    assert OccurrenceState.PAID in states(stock)
+
+
+@pytest.mark.usefixtures("seeded")
+async def test_each_team_has_its_own_budgets(db_session: AsyncSession) -> None:
+    rows = await db_session.execute(
+        select(Team.name, func.count()).join(Budget, Budget.team_id == Team.id).group_by(Team.name)
+    )
+
+    assert {name: count for name, count in rows.all()} == {KEF: 6, STUDIO: 6}

@@ -67,7 +67,7 @@ nano .env
 | `ADMIN_PASSWORD` | первый сгенерированный пароль |
 | `POSTGRES_PASSWORD` | второй сгенерированный пароль (строку `DATABASE_URL` трогать не нужно) |
 | `PUBLIC_WEB_URL` | `https://203.0.113.10` — в напоминаниях появится кнопка «Открыть в панели» |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | токен бота и `chat_id` чата |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | токен бота и `chat_id` общего чата; чаты команд задаются потом в панели («Команды» → «ID чата», ID группы покажет команда бота `/chatid`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` | например, Яндекс: `smtp.yandex.ru`, `587`, `true`; Gmail: `smtp.gmail.com`, `587`, `true` |
 | `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | адрес ящика, **пароль приложения** (не обычный пароль), тот же адрес в `SMTP_FROM` |
 | `EMAIL_ENABLED` | `true` |
