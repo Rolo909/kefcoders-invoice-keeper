@@ -1256,6 +1256,10 @@ components:
       title: AuditLogOut
     BudgetItem-Input:
       properties:
+        team_id:
+          type: string
+          format: uuid
+          title: Team Id
         currency:
           $ref: '#/components/schemas/Currency'
         period_type:
@@ -1282,6 +1286,7 @@ components:
       additionalProperties: false
       type: object
       required:
+      - team_id
       - currency
       - period_type
       - year
@@ -1290,6 +1295,10 @@ components:
       description: Бюджет валюты на месяц (month — номер месяца) или на год (month — null).
     BudgetItem-Output:
       properties:
+        team_id:
+          type: string
+          format: uuid
+          title: Team Id
         currency:
           $ref: '#/components/schemas/Currency'
         period_type:
@@ -1314,6 +1323,7 @@ components:
       additionalProperties: false
       type: object
       required:
+      - team_id
       - currency
       - period_type
       - year
@@ -2372,6 +2382,11 @@ components:
         password:
           type: string
           title: Password
+        team_id:
+          type: string
+          format: uuid
+          title: Team Id
+          description: Команда пользователя — обязательна
         full_name:
           anyOf:
           - type: string
@@ -2391,6 +2406,7 @@ components:
       required:
       - login
       - password
+      - team_id
       title: UserCreate
       description: 'Создаётся только обычный пользователь: роли в запросе нет, лишние поля отклоняются.'
     UserOut:
@@ -2451,6 +2467,13 @@ components:
           - type: string
           - type: 'null'
           title: Password
+        team_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Team Id
+          description: Перевод в другую команду; прошлые отметки остаются
         full_name:
           anyOf:
           - type: string

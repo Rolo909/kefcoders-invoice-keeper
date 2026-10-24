@@ -1,7 +1,19 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, Text, false, func, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    false,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -16,6 +28,9 @@ class User(UuidPkMixin, CreatedAtMixin, Base):
         Index("uq_users_login_lower", text("lower(login)"), unique=True),
         # Системный админ из .env ровно один.
         Index("uq_users_single_system", "is_system", unique=True, postgresql_where=text("is_system")),
+        # Администратор не состоит в команде. Команду обычного пользователя требует API (422 без неё);
+        # без команды остаётся только прежний админ, снятый при смене ADMIN_LOGIN, — он не может войти.
+        CheckConstraint("role = 'user' OR team_id IS NULL", name="team_matches_role"),
     )
 
     login: Mapped[str] = mapped_column(String(64))
@@ -23,6 +38,7 @@ class User(UuidPkMixin, CreatedAtMixin, Base):
     full_name: Mapped[str | None] = mapped_column(String(128))
     email: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(pg_enum(Role, "user_role"))
+    team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     notify_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

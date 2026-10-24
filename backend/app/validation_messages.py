@@ -28,6 +28,7 @@ FIELD_LABELS = {
     "date_to": "Конец периода",
     "as_of": "Дата итогов",
     "recurring_payment_id": "Платёж",
+    "team_id": "Команда",
     "include_deleted": "Показать прекращённые",
     "sort": "Сортировка",
     "limit": "Размер страницы",

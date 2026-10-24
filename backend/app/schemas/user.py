@@ -84,6 +84,7 @@ class UserCreate(BaseModel):
 
     login: str
     password: str
+    team_id: uuid.UUID = Field(description="Команда пользователя — обязательна")
     full_name: str | None = None
     email: str | None = None
     notify_email: bool = False
@@ -107,6 +108,7 @@ class UserUpdate(BaseModel):
 
     login: str | None = None
     password: str | None = None
+    team_id: uuid.UUID | None = Field(default=None, description="Перевод в другую команду; прошлые отметки остаются")
     full_name: str | None = None
     email: str | None = None
     notify_email: bool | None = None

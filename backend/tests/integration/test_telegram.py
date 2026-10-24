@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import handlers
 from app.db import SessionFactory
 from app.domain.enums import Currency, OccurrenceStatus, Period
-from app.models import AuditLog, PaymentOccurrence, RecurringPayment, User
+from app.models import AuditLog, PaymentOccurrence, RecurringPayment, Team, User
 from app.services.occurrences import ensure_occurrences
 from app.services.telegram import (
     LinkResult,
@@ -37,7 +37,7 @@ TG_STRANGER = 555_999
 
 
 @pytest.fixture
-async def period(db_session: AsyncSession, admin: User) -> PaymentOccurrence:
+async def period(db_session: AsyncSession, admin: User, team: Team) -> PaymentOccurrence:
     payment = RecurringPayment(
         name="Аренда офиса",
         amount=Decimal("50000.00"),

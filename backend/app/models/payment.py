@@ -42,6 +42,8 @@ class RecurringPayment(UuidPkMixin, CreatedAtMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    # Платёж одной команды; null — общий: периоды создаются у каждой команды, каждая платит за себя.
+    team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
 
 
 class PaymentOccurrence(UuidPkMixin, CreatedAtMixin, Base):
@@ -49,16 +51,20 @@ class PaymentOccurrence(UuidPkMixin, CreatedAtMixin, Base):
 
     __tablename__ = "payment_occurrences"
     __table_args__ = (
-        UniqueConstraint("recurring_payment_id", "seq"),
+        # У общего платежа период с тем же seq есть у каждой команды.
+        UniqueConstraint("recurring_payment_id", "team_id", "seq"),
         CheckConstraint("seq >= 0", name="seq_non_negative"),
         CheckConstraint("amount > 0", name="amount_positive"),
         # Оплачено ⇔ указана фактическая дата; при отмене оплаты дата очищается.
         CheckConstraint("(status = 'paid') = (paid_date IS NOT NULL)", name="paid_date_matches_status"),
         Index("ix_payment_occurrences_status_due_date", "status", "due_date"),
         Index("ix_payment_occurrences_payment_due_date", "recurring_payment_id", "due_date"),
+        Index("ix_payment_occurrences_team_due_date", "team_id", "due_date"),
     )
 
     recurring_payment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("recurring_payments.id", ondelete="CASCADE"))
+    # Команда, которая платит этот период. Удалить можно только команду без оплат — её периоды уходят с ней.
+    team_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"))
     seq: Mapped[int] = mapped_column(Integer)
     due_date: Mapped[date] = mapped_column(Date, index=True)
     # Копия суммы и валюты на момент создания периода: история не меняется задним числом.

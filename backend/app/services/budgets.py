@@ -9,8 +9,9 @@ from app.models import Budget, User
 from app.schemas.budget import BudgetItem
 from app.services import audit
 from app.services.audit import AuditAction
+from app.services.users import get_team_or_422
 
-_UNIQUE_KEY = "uq_budgets_currency_period_type_year_month"
+_UNIQUE_KEY = "uq_budgets_team_id_currency_period_type_year_month"
 
 
 async def list_budgets(session: AsyncSession, *, year: int, month: int) -> list[Budget]:
@@ -31,12 +32,21 @@ async def list_budgets(session: AsyncSession, *, year: int, month: int) -> list[
 
 async def save_budgets(session: AsyncSession, items: list[BudgetItem], *, actor: User, ip: str | None) -> list[Budget]:
     """Создать или обновить бюджеты одним запросом. Повтор одного бюджета в списке — берётся последний."""
-    unique = {(i.currency, i.period_type, i.year, i.month): i for i in items}
+    unique = {(i.team_id, i.currency, i.period_type, i.year, i.month): i for i in items}
     if not unique:
         return []
+    for team_id in {i.team_id for i in unique.values()}:
+        await get_team_or_422(session, team_id)
     stmt = pg_insert(Budget).values(
         [
-            {"currency": i.currency, "period_type": i.period_type, "year": i.year, "month": i.month, "amount": i.amount}
+            {
+                "team_id": i.team_id,
+                "currency": i.currency,
+                "period_type": i.period_type,
+                "year": i.year,
+                "month": i.month,
+                "amount": i.amount,
+            }
             for i in unique.values()
         ]
     )
@@ -45,7 +55,7 @@ async def save_budgets(session: AsyncSession, items: list[BudgetItem], *, actor:
         .returning(Budget)
         .execution_options(populate_existing=True)
     )
-    budgets = sorted(saved, key=lambda b: (b.period_type, b.currency))
+    budgets = sorted(saved, key=lambda b: (str(b.team_id), b.period_type, b.currency))
     audit.record(session, AuditAction.BUDGET_UPDATE, actor=actor, details={"items": len(budgets)}, ip=ip)
     await session.commit()
     return budgets

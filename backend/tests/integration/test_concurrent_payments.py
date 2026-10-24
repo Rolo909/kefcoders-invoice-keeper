@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.domain.enums import Currency, OccurrenceStatus, Period, Role
 from app.errors import AppError
-from app.models import AuditLog, PaymentOccurrence, RecurringPayment, User
+from app.models import AuditLog, PaymentOccurrence, RecurringPayment, Team, User
 from app.services.occurrences import update_occurrence
 from app.services.telegram import PayResult, mark_paid_from_telegram
 from tests.conftest import TEST_DATABASE_URL
@@ -43,11 +43,24 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     suffix = uuid.uuid4().hex[:8]
     async with sessions() as s:
+        team = Team(name=f"Команда {suffix}")
+        s.add(team)
+        await s.flush()
         anna = User(
-            login=f"anna-{suffix}", password_hash="x", role=Role.USER, full_name="Анна", telegram_user_id=TG_ANNA
+            login=f"anna-{suffix}",
+            password_hash="x",
+            role=Role.USER,
+            full_name="Анна",
+            telegram_user_id=TG_ANNA,
+            team_id=team.id,
         )
         maria = User(
-            login=f"maria-{suffix}", password_hash="x", role=Role.USER, full_name="Мария", telegram_user_id=TG_MARIA
+            login=f"maria-{suffix}",
+            password_hash="x",
+            role=Role.USER,
+            full_name="Мария",
+            telegram_user_id=TG_MARIA,
+            team_id=team.id,
         )
         s.add_all([anna, maria])
         await s.flush()
@@ -63,6 +76,7 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
         await s.flush()
         occurrence = PaymentOccurrence(
             recurring_payment_id=payment.id,
+            team_id=team.id,
             seq=0,
             due_date=payment.first_due_date,
             amount=payment.amount,
@@ -71,6 +85,7 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
         s.add(occurrence)
         await s.commit()
         world = World(sessions, anna.id, maria.id, payment.id, occurrence.id)
+        team_id = team.id
     try:
         yield world
     finally:
@@ -78,6 +93,7 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
             await s.execute(delete(AuditLog).where(AuditLog.entity_id == world.occurrence_id))
             await s.execute(delete(RecurringPayment).where(RecurringPayment.id == world.payment_id))
             await s.execute(delete(User).where(User.id.in_([world.anna_id, world.maria_id])))
+            await s.execute(delete(Team).where(Team.id == team_id))
             await s.commit()
         await engine.dispose()
 

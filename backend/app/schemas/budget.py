@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 from typing import Self
 
@@ -15,6 +16,7 @@ class BudgetItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    team_id: uuid.UUID
     currency: Currency
     period_type: BudgetPeriodType
     year: int = Field(ge=MIN_YEAR, le=MAX_YEAR)

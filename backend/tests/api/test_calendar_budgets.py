@@ -11,7 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, User
+from app.models import AuditLog, Team, User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 
 
@@ -118,8 +118,15 @@ BUDGETS = [
 ]
 
 
-async def test_admin_saves_and_everyone_reads_budgets(api: AsyncClient, admin_token: str, user_token: str) -> None:
-    saved = await api.put("/api/v1/budgets", json=BUDGETS, headers=bearer(admin_token))
+@pytest.fixture
+def budgets(team: Team) -> list[dict[str, Any]]:
+    return [{"team_id": str(team.id), **item} for item in BUDGETS]
+
+
+async def test_admin_saves_and_everyone_reads_budgets(
+    api: AsyncClient, admin_token: str, user_token: str, budgets: list[dict[str, Any]]
+) -> None:
+    saved = await api.put("/api/v1/budgets", json=budgets, headers=bearer(admin_token))
 
     read = await api.get("/api/v1/budgets", params={"year": 2026, "month": 10}, headers=bearer(user_token))
 
@@ -131,9 +138,11 @@ async def test_admin_saves_and_everyone_reads_budgets(api: AsyncClient, admin_to
     }
 
 
-async def test_saving_again_updates_instead_of_duplicating(api: AsyncClient, admin_token: str) -> None:
-    await api.put("/api/v1/budgets", json=BUDGETS, headers=bearer(admin_token))
-    changed = [{**BUDGETS[0], "amount": "95000"}]
+async def test_saving_again_updates_instead_of_duplicating(
+    api: AsyncClient, admin_token: str, budgets: list[dict[str, Any]]
+) -> None:
+    await api.put("/api/v1/budgets", json=budgets, headers=bearer(admin_token))
+    changed = [{**budgets[0], "amount": "95000"}]
 
     await api.put("/api/v1/budgets", json=changed, headers=bearer(admin_token))
 
@@ -143,8 +152,10 @@ async def test_saving_again_updates_instead_of_duplicating(api: AsyncClient, adm
     assert len(read) == 3
 
 
-async def test_other_months_budget_is_not_returned(api: AsyncClient, admin_token: str) -> None:
-    await api.put("/api/v1/budgets", json=BUDGETS, headers=bearer(admin_token))
+async def test_other_months_budget_is_not_returned(
+    api: AsyncClient, admin_token: str, budgets: list[dict[str, Any]]
+) -> None:
+    await api.put("/api/v1/budgets", json=budgets, headers=bearer(admin_token))
 
     november = (
         await api.get("/api/v1/budgets", params={"year": 2026, "month": 11}, headers=bearer(admin_token))
@@ -153,8 +164,10 @@ async def test_other_months_budget_is_not_returned(api: AsyncClient, admin_token
     assert [(b["currency"], b["period_type"]) for b in november] == [("RUB", "year")]
 
 
-async def test_budget_shows_up_in_month_summary(api: AsyncClient, admin_token: str) -> None:
-    await api.put("/api/v1/budgets", json=BUDGETS, headers=bearer(admin_token))
+async def test_budget_shows_up_in_month_summary(
+    api: AsyncClient, admin_token: str, budgets: list[dict[str, Any]]
+) -> None:
+    await api.put("/api/v1/budgets", json=budgets, headers=bearer(admin_token))
     await add_payment(api, admin_token, name="Аренда", amount="50000", currency="RUB", next_due_date="2026-10-25")
 
     summary = await api.get(
@@ -167,14 +180,16 @@ async def test_budget_shows_up_in_month_summary(api: AsyncClient, admin_token: s
     assert (rub["budget"], rub["budget_left"]) == ("90000.00", "40000.00")
 
 
-async def test_user_cannot_change_budgets(api: AsyncClient, user_token: str) -> None:
-    response = await api.put("/api/v1/budgets", json=BUDGETS, headers=bearer(user_token))
+async def test_user_cannot_change_budgets(api: AsyncClient, user_token: str, budgets: list[dict[str, Any]]) -> None:
+    response = await api.put("/api/v1/budgets", json=budgets, headers=bearer(user_token))
 
     assert response.status_code == 403
 
 
-async def test_budget_change_is_audited(api: AsyncClient, admin_token: str, db_session: AsyncSession) -> None:
-    await api.put("/api/v1/budgets", json=BUDGETS, headers=bearer(admin_token))
+async def test_budget_change_is_audited(
+    api: AsyncClient, admin_token: str, db_session: AsyncSession, budgets: list[dict[str, Any]]
+) -> None:
+    await api.put("/api/v1/budgets", json=budgets, headers=bearer(admin_token))
 
     details = await db_session.scalar(select(AuditLog.details).where(AuditLog.action == "budget.update"))
 
@@ -192,8 +207,8 @@ async def test_budget_change_is_audited(api: AsyncClient, admin_token: str, db_s
         {**BUDGETS[0], "currency": "GBP"},
     ],
 )
-async def test_invalid_budget_is_rejected(api: AsyncClient, admin_token: str, item: dict[str, Any]) -> None:
-    response = await api.put("/api/v1/budgets", json=[item], headers=bearer(admin_token))
+async def test_invalid_budget_is_rejected(api: AsyncClient, admin_token: str, item: dict[str, Any], team: Team) -> None:
+    response = await api.put("/api/v1/budgets", json=[{"team_id": str(team.id), **item}], headers=bearer(admin_token))
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"

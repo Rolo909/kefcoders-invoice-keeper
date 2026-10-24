@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import status
 from sqlalchemy import ColumnElement, Date, Select, and_, func, literal, or_, select
@@ -12,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
+from app.config import get_settings
 from app.domain.enums import (
     Currency,
     NotificationChannel,
@@ -20,9 +22,9 @@ from app.domain.enums import (
     OccurrenceState,
     OccurrenceStatus,
 )
-from app.domain.schedule import due_date
+from app.domain.schedule import due_date, first_seq_on_or_after
 from app.errors import AppError, not_found
-from app.models import Attachment, AuditLog, Notification, PaymentOccurrence, RecurringPayment, User
+from app.models import Attachment, AuditLog, Notification, PaymentOccurrence, RecurringPayment, Team, User
 from app.services import audit
 from app.services.audit import AuditAction
 
@@ -34,14 +36,25 @@ PaidBy = aliased(User, name="paid_by_user")
 
 
 def missing_occurrences(
-    payment: RecurringPayment, *, last_seq: int | None, last_due: date | None, today: date, horizon_days: int
+    payment: RecurringPayment,
+    *,
+    team_id: uuid.UUID,
+    last_seq: int | None,
+    last_due: date | None,
+    today: date,
+    horizon_days: int,
+    start: date | None = None,
 ) -> list[dict[str, Any]]:
-    """Периоды, которых не хватает: все сроки до today + horizon и всегда хотя бы один будущий срок.
+    """Периоды команды, которых не хватает: все сроки до today + horizon и всегда хотя бы один будущий срок.
 
     Статус прошлых периодов на создание следующих не влияет — просрочка не останавливает расписание.
+    start — первый допустимый срок (команда подключилась к общему платежу позже его создания).
     """
     horizon_end = today + timedelta(days=horizon_days)
-    seq = 0 if last_seq is None else last_seq + 1
+    if last_seq is not None:
+        seq = last_seq + 1
+    else:
+        seq = 0 if start is None else first_seq_on_or_after(payment.first_due_date, payment.period, start)
     has_future = last_due is not None and last_due > today
     rows: list[dict[str, Any]] = []
     while True:
@@ -54,6 +67,7 @@ def missing_occurrences(
             {
                 "id": uuid.uuid4(),
                 "recurring_payment_id": payment.id,
+                "team_id": team_id,
                 "seq": seq,
                 "due_date": due,
                 "amount": payment.amount,
@@ -69,26 +83,55 @@ async def _insert_occurrences(session: AsyncSession, rows: list[dict[str, Any]])
     if rows:
         # ON CONFLICT: параллельный запуск (API и worker) не создаст период дважды.
         await session.execute(
-            pg_insert(Occ).values(rows).on_conflict_do_nothing(index_elements=["recurring_payment_id", "seq"])
+            pg_insert(Occ)
+            .values(rows)
+            .on_conflict_do_nothing(index_elements=["recurring_payment_id", "team_id", "seq"])
         )
 
 
+def team_start(payment: RecurringPayment, team: Team, timezone: ZoneInfo) -> date | None:
+    """С какого срока команда платит общий платёж: если она появилась позже платежа — со дня своего создания.
+
+    Так у новой команды нет «долгов» за сроки, прошедшие до неё. Платёж команды — со своего первого срока.
+    """
+    if payment.team_id is not None:
+        return None
+    joined = team.created_at.astimezone(timezone).date()
+    return joined if joined > payment.created_at.astimezone(timezone).date() else None
+
+
 async def ensure_occurrences(
-    session: AsyncSession, payments: Sequence[RecurringPayment] | None = None, *, today: date, horizon_days: int
+    session: AsyncSession,
+    payments: Sequence[RecurringPayment] | None = None,
+    *,
+    today: date,
+    horizon_days: int,
+    timezone: ZoneInfo | None = None,
 ) -> None:
-    """Досоздаёт недостающие периоды активных платежей (всех или переданных). Идемпотентно."""
+    """Досоздаёт недостающие периоды активных платежей (всех или переданных) у их команд. Идемпотентно.
+
+    Платёж команды — периоды только у неё; общий платёж (team_id = null) — у каждой команды.
+    """
+    tz = timezone or get_settings().timezone
     stmt = (
-        select(RecurringPayment, func.max(Occ.seq), func.max(Occ.due_date))
-        .outerjoin(Occ, Occ.recurring_payment_id == RecurringPayment.id)
+        select(RecurringPayment, Team, func.max(Occ.seq), func.max(Occ.due_date))
+        .join(Team, or_(RecurringPayment.team_id == Team.id, RecurringPayment.team_id.is_(None)))
+        .outerjoin(Occ, and_(Occ.recurring_payment_id == RecurringPayment.id, Occ.team_id == Team.id))
         .where(RecurringPayment.deleted_at.is_(None), RecurringPayment.is_active)
-        .group_by(RecurringPayment.id)
+        .group_by(RecurringPayment.id, Team.id)
     )
     if payments is not None:
         stmt = stmt.where(RecurringPayment.id.in_([p.id for p in payments]))
     rows: list[dict[str, Any]] = []
-    for payment, last_seq, last_due in await session.execute(stmt):
+    for payment, team, last_seq, last_due in await session.execute(stmt):
         rows += missing_occurrences(
-            payment, last_seq=last_seq, last_due=last_due, today=today, horizon_days=horizon_days
+            payment,
+            team_id=team.id,
+            last_seq=last_seq,
+            last_due=last_due,
+            today=today,
+            horizon_days=horizon_days,
+            start=team_start(payment, team, tz),
         )
     await _insert_occurrences(session, rows)
 

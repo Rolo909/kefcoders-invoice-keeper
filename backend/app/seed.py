@@ -25,7 +25,7 @@ from app.db import engine, session_factory
 from app.domain.enums import BudgetPeriodType, Currency, OccurrenceStatus, Period, Role
 from app.domain.schedule import add_months_clamped, due_date
 from app.domain.status import today_in
-from app.models import Budget, PaymentOccurrence, RecurringPayment, User
+from app.models import Budget, PaymentOccurrence, RecurringPayment, Team, User
 from app.security import hash_password
 from app.services import audit
 from app.services.audit import AuditAction
@@ -35,6 +35,7 @@ from app.services.occurrences import ensure_occurrences
 logger = logging.getLogger(__name__)
 
 MARKER_LOGIN = "anna"
+DEMO_TEAM = "Kefcoders"
 DEMO_USERS = (
     # логин, пароль, ФИО, почта, напоминания на почту
     ("anna", "anna12345", "Анна Ковалёва", "anna@kefcoders.ru", True),
@@ -139,11 +140,12 @@ def _moment(day: date, hour: int, tz: ZoneInfo) -> datetime:
     return datetime.combine(day, time(hour), tzinfo=tz)
 
 
-async def _create_users(session: AsyncSession, today: date, tz: ZoneInfo) -> dict[str, User]:
+async def _create_users(session: AsyncSession, team: Team, today: date, tz: ZoneInfo) -> dict[str, User]:
     users = {}
     for login, password, full_name, email, notify in DEMO_USERS:
         user = User(
             login=login,
+            team_id=team.id,
             password_hash=hash_password(password),
             full_name=full_name,
             email=email,
@@ -157,7 +159,9 @@ async def _create_users(session: AsyncSession, today: date, tz: ZoneInfo) -> dic
     return users
 
 
-async def _create_payment(session: AsyncSession, spec: Spec, admin: User, today: date, tz: ZoneInfo) -> None:
+async def _create_payment(
+    session: AsyncSession, spec: Spec, admin: User, team: Team, today: date, tz: ZoneInfo
+) -> None:
     payment = RecurringPayment(
         name=spec.name,
         description=spec.description,
@@ -180,13 +184,16 @@ async def _create_payment(session: AsyncSession, spec: Spec, admin: User, today:
     )
 
     if spec.stopped_on is None:
-        await ensure_occurrences(session, [payment], today=today, horizon_days=get_settings().occurrence_horizon_days)
+        await ensure_occurrences(
+            session, [payment], today=today, horizon_days=get_settings().occurrence_horizon_days, timezone=tz
+        )
     else:  # прекращённый платёж: история до даты прекращения
         seq = 0
         while (due := due_date(payment.first_due_date, payment.period, seq)) <= spec.stopped_on:
             session.add(
                 PaymentOccurrence(
                     recurring_payment_id=payment.id,
+                    team_id=team.id,
                     seq=seq,
                     due_date=due,
                     amount=payment.amount,
@@ -229,11 +236,12 @@ async def _mark_paid(session: AsyncSession, payment: RecurringPayment, rule: Pai
         )
 
 
-def _budgets(today: date) -> list[Budget]:
+def _budgets(team: Team, today: date) -> list[Budget]:
     budgets = []
     for currency, (monthly, yearly) in BUDGETS.items():
         budgets.append(
             Budget(
+                team_id=team.id,
                 currency=currency,
                 period_type=BudgetPeriodType.MONTH,
                 year=today.year,
@@ -241,7 +249,11 @@ def _budgets(today: date) -> list[Budget]:
                 amount=monthly,
             )
         )
-        budgets.append(Budget(currency=currency, period_type=BudgetPeriodType.YEAR, year=today.year, amount=yearly))
+        budgets.append(
+            Budget(
+                team_id=team.id, currency=currency, period_type=BudgetPeriodType.YEAR, year=today.year, amount=yearly
+            )
+        )
     return budgets
 
 
@@ -254,10 +266,14 @@ async def seed_demo_data(session: AsyncSession, *, today: date, tz: ZoneInfo) ->
         logger.warning("Тестовые данные не созданы: нет администратора — сначала python -m app.bootstrap")
         return False
 
-    users = await _create_users(session, today, tz)
+    # Команда старше всех платежей — получает их периоды с первого срока.
+    team = Team(name=DEMO_TEAM, created_at=_moment(today - timedelta(days=240), 10, tz))
+    session.add(team)
+    await session.flush()
+    users = await _create_users(session, team, today, tz)
     for spec in _specs(today, users["anna"], users["maria"]):
-        await _create_payment(session, spec, admin, today, tz)
-    session.add_all(_budgets(today))
+        await _create_payment(session, spec, admin, team, today, tz)
+    session.add_all(_budgets(team, today))
     await session.flush()
     return True
 

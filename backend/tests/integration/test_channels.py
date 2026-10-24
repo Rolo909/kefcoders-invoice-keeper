@@ -58,7 +58,9 @@ async def test_email_goes_to_users_with_notifications_and_extra_addresses(
     db_session: AsyncSession, regular_user: User, session_factory: SessionFactory, smtp: AsyncMock
 ) -> None:
     regular_user.email, regular_user.notify_email = "anna@kefcoders.ru", True
-    db_session.add(User(login="maria", password_hash="x", role="user", email="maria@kefcoders.ru"))
+    db_session.add(
+        User(login="maria", password_hash="x", role="user", email="maria@kefcoders.ru", team_id=regular_user.team_id)
+    )
     await db_session.flush()
 
     result = await email_notifier(session_factory, ["boss@kefcoders.ru", "anna@kefcoders.ru"]).send(REMINDER)
