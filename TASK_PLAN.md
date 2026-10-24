@@ -84,7 +84,7 @@
 | 6 | Другие каналы | на усмотрение команды | этап 11: **уведомления в веб-панели** (колокольчик со счётчиком непрочитанных), §7 |
 | 7 | Чек или ссылка | прикрепляются к конкретной оплате | этап 10 |
 | 8 | Логи | авторизация и действия | этап 10 |
-| 9 | Проработанный UX/UI | удобство интерфейса и взаимодействия | этапы 6, 12 |
+| 9 | Проработанный UX/UI | удобство интерфейса и взаимодействия | наработка `frontend/` (§9.0), этапы 12–13 |
 
 > Дополнительные функции не заменяют обязательные: сначала закрываем этапы 1–7, затем extras.
 
@@ -106,7 +106,8 @@
 | Frontend | **React 18 + Vite + TypeScript** | |
 | UI-кит | **Mantine 7** (+ `@mantine/dates`, `@mantine/notifications`) | готовые таблицы, формы, календарь, тёмная тема |
 | Данные на фронте | **TanStack Query 5**, `react-router 6`, `react-hook-form` + `zod` | кеш/инвалидация, формы с валидацией |
-| Типы API на фронте | **openapi-typescript** из `docs/openapi.yaml` | контракт фронт ↔ бэк из одного источника |
+| Типы API на фронте | рукописные `frontend/src/api/types.ts` (уже есть) + сверка с `docs/openapi.yaml` на этапе 12 | контракт зафиксирован в наработке веб-панели (§5.4) |
+| Имитация API | **MSW 2** (`frontend/src/mocks`, уже есть) | панель работает и переделывается без бэкенда |
 | Тесты | **pytest + pytest-asyncio + httpx.AsyncClient**, `time-machine` (заморозка даты), Postgres в docker; фронт — Vitest; e2e — Playwright (по возможности) | |
 | Линт | ruff, mypy (backend); eslint + tsc (frontend) | |
 | Запуск | **Docker Compose**: `db`, `backend`, `worker`, `frontend` (nginx), `mailpit` | один шаг запуска для жюри |
@@ -195,17 +196,22 @@ infrastructure (SQLAlchemy-модели и репозитории, telegram/emai
 │   │   ├── seed.py           # идемпотентные демо-данные
 │   │   └── scripts/export_openapi.py
 │   └── tests/ (unit/, api/, conftest.py)
-└── frontend/
-    ├── Dockerfile            # build → nginx
-    ├── nginx.conf            # SPA fallback + proxy /api → backend:8000
-    ├── package.json, vite.config.ts
+└── frontend/                 # УЖЕ ЕСТЬ (наработка, §9.0)
+    ├── Dockerfile            # node:20 build (VITE_API_MOCK=false) → nginx:alpine :8080
+    ├── nginx.conf            # SPA fallback + proxy /api/ → backend:8000, client_max_body_size 12m
+    ├── .env.development      # VITE_API_MOCK=true — dev-режим на имитации API
+    ├── package.json, vite.config.ts (proxy /api → API_PROXY_TARGET при VITE_API_MOCK=false)
+    ├── public/mockServiceWorker.js
     └── src/
-        ├── api/ (client.ts, schema.d.ts — сгенерировано, hooks.ts)
-        ├── auth/ (AuthProvider, RequireAuth, RequireAdmin)
-        ├── pages/ (Login, Dashboard, Occurrences, RecurringPayments, RecurringPaymentDetails,
-        │           Calendar, Summary, Users, AuditLog, Settings)
-        ├── components/ (StatusBadge, MoneyCell, PayDialog, AttachmentList, CurrencyTotals, ...)
-        └── lib/ (format.ts: деньги/даты в TZ, i18n-строки)
+        ├── api/              # СЛОЙ КОНТРАКТА: client.ts, hooks.ts (TanStack Query), types.ts
+        ├── auth/             # AuthProvider, RequireAuth, RequireAdmin
+        ├── lib/              # dates.ts, format.ts, audit.ts (+ тесты Vitest)
+        ├── mocks/            # MSW: db.ts (правила §4 в браузере), handlers.ts (все эндпоинты §5)
+        ├── pages/            # СЛОЙ ДИЗАЙНА: Dashboard, Occurrences, Occurrence, Payments, Payment,
+        │                     #   Calendar, Summary, Users, Audit, Settings, Login, NotFound
+        ├── components/       # СЛОЙ ДИЗАЙНА: AppLayout, Bell, dialogs/*, Marks, CountUp, ...
+        ├── styles/ledger.css, theme.ts   # СЛОЙ ДИЗАЙНА
+        └── App.tsx, main.tsx
 ```
 
 ---
@@ -341,7 +347,9 @@ def state(o, today):  # для UI/фильтров
 | `status=paid`, без даты | `paid_date = today` |
 | `status=paid`, `paid_date=X` | `paid_date = X` |
 | только `paid_date=X` при `paid` | исправление фактической даты |
-| только `paid_date` при `unpaid` | 409/422 «сначала отметьте оплату» |
+| только `paid_date` при `unpaid` | **409**, `code: "not_paid"` «сначала отметьте оплату» |
+| ни `status`, ни `paid_date` | 422 `validation_error` |
+| `status=paid` для уже оплаченного + другая дата | исправление даты (audit `occurrence.change_paid_date`) |
 | `status=unpaid` | `paid_date = NULL`, `paid_by = NULL` (правило 3) |
 Валидация: `paid_date <= today` (в будущем — 422). `due_date`, `amount`, `currency` в PATCH **не принимаются** (`extra="forbid"`). Каждая смена пишется в audit log с old/new значениями. Периоды удалённого платежа остаются доступными для просмотра и исправлений истории.
 
@@ -390,11 +398,17 @@ AND NOT EXISTS (notification с тем же occurrence_id, channel, kind='before
 { "period": {"from": "2026-10-01", "to": "2026-10-31"}, "as_of": "2026-10-23",
   "totals": [
     {"currency": "RUB", "planned": "50000.00", "paid": "0.00", "unpaid": "50000.00",
-     "overdue": "0.00", "count_total": 1, "count_paid": 0, "count_overdue": 0,
+     "overdue": "0.00", "paid_late": "0.00", "count_total": 1, "count_paid": 0, "count_overdue": 0,
      "budget": "60000.00", "budget_left": "10000.00"},
     {"currency": "USD", ...}, {"currency": "EUR", ...}] }
 ```
-Суммирование — `numeric` в SQL с `GROUP BY currency`; `planned` для будущих месяцев за горизонтом — через `dates_in_range` (плановые расходы, extra). `as_of`: оплачено = `paid_date <= as_of`, просрочено = статус на эту дату.
+Суммирование — `numeric` в SQL с `GROUP BY currency`; `planned` для будущих месяцев за горизонтом — через `dates_in_range` (плановые расходы, extra). Семантика полей (совпадает с имитацией API в `frontend/src/mocks/handlers.ts`, функция `totals`):
+- `planned` = сумма созданных периодов в `[date_from, date_to]` + плановые сроки без созданных периодов; `count_total` — их количество.
+- «оплачен на дату» = `status='paid' AND paid_date <= as_of` (`as_of` по умолчанию — сегодня).
+- `paid` = сумма оплаченных на дату; `unpaid` = `planned − paid`.
+- `overdue` = **только неоплаченное** на дату с `due_date < as_of`; `count_overdue` — их число.
+- `paid_late` = оплаченное на дату с `paid_date > due_date` (отдельно от `overdue`).
+- `budget` = бюджет валюты на месяц (`null`, если не задан); `budget_left = budget − planned`.
 
 ### 4.8 Авторизация и админ из `.env`
 - `bootstrap.py` при старте: upsert пользователя `ADMIN_LOGIN` с `role=admin, is_system=true`, пароль из `ADMIN_PASSWORD` (перехешируется, если изменился). Если логин админа в `.env` сменили — прежний system-админ деактивируется (удаляются его сессии, `is_system` переносится).
@@ -460,7 +474,40 @@ AND NOT EXISTS (notification с тем же occurrence_id, channel, kind='before
 - FastAPI: `FastAPI(docs_url="/api/v1/docs", openapi_url="/api/v1/openapi.json", redoc_url=None)`, теги, описания, примеры (`json_schema_extra`), коды ответов 401/403/404/409/422 в `responses=`.
 - `python -m app.scripts.export_openapi > docs/openapi.yaml` (PyYAML). Файл коммитится.
 - Тест `test_openapi_up_to_date` — сравнивает сгенерированную схему с `docs/openapi.yaml` (не даёт артефакту устареть).
-- Фронтенд генерирует типы из этого же файла: `npx openapi-typescript ../docs/openapi.yaml -o src/api/schema.d.ts`.
+- Фронтенд использует свои рукописные типы `src/api/types.ts`; на этапе 12 они сверяются с `docs/openapi.yaml` (§5.4, п. «Сверка»).
+
+### 5.4 Контракт веб-панели (обязательно для бэкенда)
+Веб-панель уже написана против имитации API (`frontend/src/mocks`), её ожидания описаны в `frontend/README.md` («Что фронтенд ждёт от бэкенда») и типах `frontend/src/api/types.ts`. **Бэкенд реализует ровно этот контракт** — тогда подключение панели на этапе 12 сводится к переключению `VITE_API_MOCK=false`, а не к переделке UI. Источник правды при расхождении: `types.ts` + `handlers.ts` для формы ответов, этот план — для бизнес-правил.
+
+**Дополнительные эндпоинты, которых нет в §5.1–5.2:**
+| Метод | Путь | Назначение | Роль |
+|---|---|---|---|
+| PATCH | `/api/v1/auth/me` | `{email, notify_email}` — пользователь меняет свою почту; system-админ → 403 `system_user`; `notify_email=true` без email → 422 | auth |
+
+**Формы ответов:**
+- `GET /auth/me` → `{ user, server_today, timezone }`; `server_today` считается в `APP_TIMEZONE`. Фронтенд берёт «сегодня» только отсюда.
+- `User` = `{id, login, full_name, email, role, is_system, telegram_linked: bool, notify_email, created_at}` — **`telegram_linked` вместо `telegram_user_id`** (id в Telegram наружу не отдаём).
+- `POST /auth/login` → `{access_token, token_type: "bearer", expires_at, user}`.
+- `Occurrence` дополнительно к полям §3.1: `recurring_payment: {id, name, period, is_deleted}`, `paid_by: {id, login, full_name} | null`, вычисляемые `is_overdue`, `state`, `days_overdue`, а также `attachments_count` и `last_reminder_at` (время последнего `sent` уведомления `telegram/before_due`).
+- `GET /payment-occurrences/{id}` → `OccurrenceDetail` = `Occurrence` + `history` (записи audit по этому периоду, `entity_type='occurrence'`) + `reminders` (все `notifications` по периоду, новые сверху).
+- `RecurringPayment` = поля §3.1 + `created_by: UserBrief` + `next_occurrence: Occurrence | null`; `GET /recurring-payments/{id}` → + `occurrences[]` (новые сверху). Список: сначала активные, затем прекращённые; внутри — по ближайшему сроку.
+- Все списки — `Page<T> = {items, total, limit, offset}`, кроме `GET /budgets` и `GET /payment-occurrences/{id}/attachments` (простые массивы).
+- `GET /payment-occurrences`: `currency` повторяется (`currency=RUB&currency=USD`); `sort` ∈ `due_date | -due_date | amount | -amount | days_overdue | -days_overdue` (вторичная сортировка — по названию платежа); фильтры `status`, `overdue`, `state`, `date_from`, `date_to`, `recurring_payment_id`.
+- `GET /payments/calendar?month=YYYY-MM` → `{ month, days: [{ date, occurrences: Occurrence[], planned: [{recurring_payment_id, name, due_date, amount, currency}] }] }`; `planned` — будущие сроки без созданных периодов.
+- `GET /budgets?year&month` → `Budget[]` (`{currency, period_type: "month"|"year", year, month|null, amount}`); `PUT /budgets` принимает и возвращает такой же массив; сумма > 0.
+- `GET /inbox` → `{ items, unread_count }`, элемент: `{id, occurrence_id, kind, created_at, read, payment_name, amount, currency, due_date, occurrence_state, paid_date, payment_deleted}`.
+- `POST /notifications/test` → `{ channels: [{channel, ok, error}] }`.
+- `POST /telegram/link-code` → `{code, expires_at}` (6 цифр, 10 минут).
+- `GET /health` → `{status: "ok", db: "ok"}`.
+- `AuditLog.details` содержит ключи `payment_name`, `due_date`, `paid_date`, `old_paid_date`, `new_paid_date`, `name`, `login` — по ним `frontend/src/lib/audit.ts` строит текст события. Названия действий — как в §3.1.
+
+**Ошибки:** всегда `{detail: string, code: string}`, `detail` — по-русски, готов к показу пользователю. Глобальный обработчик FastAPI переводит `RequestValidationError` в `422 {detail: "…; …", code: "validation_error"}` (тексты как в имитации: «Сумма — больше нуля, не больше двух знаков после запятой» и т. п.). Коды, которые различает панель: `unauthorized` (401), `invalid_credentials` (401), `rate_limited` (429 на вход), `forbidden` (403), `system_user` (403), `not_found` (404), `login_taken` (409), `not_paid` (409), `validation_error` (422).
+
+**Валидация, совпадающая с панелью:** логин `^[a-z0-9._-]{3,64}$` (без учёта регистра, уникален), пароль ≥ 8 символов, email — простой формат; `end_date >= next_due_date`; нельзя удалить самого себя (403 `forbidden`); повторный `DELETE /recurring-payments/{id}` → 204.
+
+**Демо-учётки** должны совпадать с имитацией: `admin` (из `.env`), `anna`, `maria`, `user` (§12).
+
+**Сверка (этап 12):** прогнать сценарий §0.6 и все страницы на реальном бэкенде; расхождения исправляются **в бэкенде**, если не противоречат кейсу; иначе — в `types.ts`/`hooks.ts` панели и в имитации одновременно.
 
 ---
 
@@ -505,6 +552,24 @@ AND NOT EXISTS (notification с тем же occurrence_id, channel, kind='before
 
 ## 9. Frontend (веб-панель)
 
+### 9.0 Текущее состояние наработки (`frontend/`, коммит `b09c4eb`)
+Панель **уже реализована** на стеке §1 (React 18, Vite 6, TS 5.9, Mantine 7, TanStack Query 5, react-router 6, react-hook-form + zod) и работает **без бэкенда**: запросы к `/api/v1` перехватывает MSW (`src/mocks`), данные лежат в `localStorage`, сброс — `?reset-demo`.
+
+| Что | Состояние |
+|---|---|
+| Все страницы §9.1 + колокольчик, диалоги оплаты/отмены/исправления даты, вложения, привязка Telegram, журнал, бюджеты, календарь | готово (на имитации) |
+| Слой контракта `src/api` (client, hooks, types), `src/auth` | готово; совпадает с §5 + уточнения §5.4 |
+| Имитация API `src/mocks` (правила §4: даты, просрочка, напоминания без дублей, удаление) | готово, есть тесты `db.test.ts` |
+| `Dockerfile` (сборка с `VITE_API_MOCK=false`) и `nginx.conf` (proxy `/api/` → `backend:8000`) | готово, совместимо с §11 |
+| Проверки `npm run typecheck / lint / test / build` | есть |
+| Работа с настоящим бэкендом | **не проверялась** — бэкенда ещё нет |
+| Дизайн (`pages/`, `components/`, `styles/ledger.css`, `theme.ts`) | **не утверждён**, возможна переделка |
+
+**Что в наработке нужно сделать — только на этапах 12–13**, до этого её не трогаем:
+1. Подключить к реальному бэкенду и сверить контракт (§5.4).
+2. (Если решите) переделать дизайн — затрагивает только слой дизайна.
+3. Мелочи, найденные при сверке: e2e-сценарий, тексты ошибок, состояния загрузки.
+
 ### 9.1 Страницы
 | Путь | Страница | Роль | Содержимое |
 |---|---|---|---|
@@ -529,6 +594,13 @@ AND NOT EXISTS (notification с тем же occurrence_id, channel, kind='before
 - Форматирование: `Intl.NumberFormat('ru-RU', {style:'currency', currency})`, даты — `dd.MM.yyyy`; «сегодня» берётся с сервера (`/auth/me` возвращает `server_today` и `timezone`), чтобы фронт и бэк одинаково понимали просрочку.
 - Статус-бейджи: «Оплачено» (зелёный), «Оплачено с опозданием» (жёлтый), «Скоро» (оранжевый, ≤ 3 дней), «Просрочено N дн.» (красный), «Ожидает» (серый).
 - UX: адаптивность (мобильная ширина), тёмная тема, пустые состояния, скелетоны загрузки, подтверждения опасных действий, русский интерфейс.
+
+### 9.3 Как не привязываться к дизайну
+- **Бэкенд-этапы 0–11 не требуют правок в `frontend/`.** Всё проверяется через pytest и Swagger (`/api/v1/docs`); веб-панель в это время собирается тем же `Dockerfile` и просто лежит в compose.
+- **Граница слоёв.** Контракт — `src/api/*`, `src/auth/*`, `src/lib/*`, `src/mocks/*`. Дизайн — `src/pages/*`, `src/components/*`, `src/styles/*`, `src/theme.ts`. Редизайн меняет только слой дизайна и продолжает использовать хуки из `src/api/hooks.ts` — тогда работа с бэкендом не ломается.
+- **Редизайн можно делать параллельно с бэкендом в любой момент** — на имитации (`npm run dev`, `VITE_API_MOCK=true`), не дожидаясь этапа 12.
+- **Крайний срок для решения по дизайну — начало этапа 12.** К этому моменту должен быть выбран вариант: (а) оставить текущий дизайн, (б) переделка уже готова на имитации, (в) переделка идёт после сдачи обязательной части (этап 13, необязательный).
+- Требование приёмки: в веб-панели должны быть авторизация и список (сумма, валюта, срок, статус, дата оплаты, просрочка), плюс весь сценарий §0.6. Текущий дизайн это уже закрывает, поэтому этап 12 можно пройти **без** редизайна.
 
 ---
 
@@ -597,7 +669,7 @@ UPLOAD_MAX_MB=10
 | Сервер Hetzner/VPS | 20.00 **USD** | monthly | сегодня − 40 дней | прошлый период оплачен вовремя, текущий просрочен |
 | Подписка Figma/JetBrains | 15.00 **EUR** | monthly | 31-е число прошлого месяца | правило «нет числа → последний день», оплачено с опозданием (для исправления даты) |
 | Домен | 1 500.00 RUB | yearly | сегодня + 20 дней | другая периодичность |
-Пользователи: `user` / `user12345`, `anna` / `anna12345` (пароли демо, указаны в README и `docs/demo-scenario.md`). Бюджеты: RUB 60 000/мес, USD 50/мес, EUR 30/мес. Сид не создаёт данные повторно (проверка по маркеру/имени). `SEED_DEMO_DATA=false` — чистая система.
+Пользователи — те же, что в имитации API панели: `anna` / `anna12345`, `maria` / `maria12345`, `user` / `user12345` (пароли демо, указаны в README и `docs/demo-scenario.md`). Админ — `admin` из `.env` (в `.env.example` пароль-заглушка; README просит задать свой). Бюджеты: RUB 60 000/мес, USD 50/мес, EUR 30/мес. Сид не создаёт данные повторно (проверка по маркеру/имени). `SEED_DEMO_DATA=false` — чистая система.
 
 ---
 
@@ -605,13 +677,25 @@ UPLOAD_MAX_MB=10
 
 Каждый этап заканчивается проверкой; следующий начинается, только когда проверка зелёная.
 
-### Этап 0. Каркас и инфраструктура (≈ 2 ч)
-1. Монорепо `backend/`, `frontend/`, `docs/`; `.gitignore`, `.editorconfig`.
+**Порядок: сначала весь бэкенд (этапы 0–11), потом веб-панель (этапы 12–13).** Веб-панель уже готова на имитации API (§9.0), поэтому до этапа 12 папку `frontend/` не трогаем. Решение по дизайну можно отложить до начала этапа 12 (§9.3).
+
+```mermaid
+flowchart LR
+  B0[0 Каркас] --> B1[1 Домен] --> B2[2 Auth] --> B3[3 Платежи] --> B4[4 Итоги] --> B5[5 Напоминания]
+  B5 --> B6[6 Контракт панели] --> B7[7 Сиды/README]
+  B7 --> B8[8 TG-кнопка] --> B9[9 Календарь/бюджеты] --> B10[10 Логи/чеки] --> B11[11 Каналы]
+  B11 --> F12[12 Панель ↔ бэкенд]
+  F12 --> F13[13 Дизайн/UX и приёмка]
+  D{{Решение по дизайну}} -.->|не позже начала 12| F12
+  R[Редизайн на имитации API<br/>параллельно, по желанию] -.-> F12
+```
+
+### Этап 0. Каркас и инфраструктура (≈ 1.5 ч)
+1. Монорепо: `backend/`, `docs/` рядом с существующим `frontend/`; корневые `.gitignore`, `.editorconfig`.
 2. Backend: `pyproject.toml` (fastapi, uvicorn[standard], sqlalchemy[asyncio], asyncpg, alembic, pydantic-settings, pwdlib[argon2], aiogram, apscheduler, httpx, aiosmtplib, python-multipart, pyyaml; dev: pytest, pytest-asyncio, time-machine, ruff, mypy).
-3. `config.py`, `db.py`, `main.py` с `/api/v1/health`, Swagger на `/api/v1/docs`.
-4. Frontend: `npm create vite` (react-ts), Mantine, TanStack Query, router; страница-заглушка.
-5. Dockerfile'ы, `docker-compose.yml`, `nginx.conf`, `.env.example`.
-- **Проверка**: `docker compose up --build` → `http://localhost:8080` открывает SPA, `http://localhost:8080/api/v1/docs` — Swagger, `/api/v1/health` = ok.
+3. `config.py`, `db.py`, `main.py` с `/api/v1/health` (`{status, db}`), Swagger на `/api/v1/docs`.
+4. `backend/Dockerfile`, корневой `docker-compose.yml` (§11), `.env.example` (§10). Сервис `frontend` собирается **существующим** `frontend/Dockerfile` без изменений.
+- **Проверка**: `docker compose up --build` → `http://localhost:8080/api/v1/docs` — Swagger, `/api/v1/health` = ok; `http://localhost:8080` отдаёт собранную панель (до этапа 2 она показывает экран входа без рабочего логина — это ожидаемо).
 
 ### Этап 1. Модель данных и доменная логика (≈ 3 ч)
 1. SQLAlchemy-модели (§3), стартовая миграция Alembic с constraint'ами.
@@ -645,42 +729,68 @@ UPLOAD_MAX_MB=10
 5. Тесты (Notifier замокан, время заморожено): за 4 дня — нет; за 3/2/1/0 дней — ровно одно сообщение; двойной/параллельный запуск — одно; оплаченный — ни одного; удалённый — ни одного; платёж с сроком через 1 день → сообщение сразу при создании; ошибка отправки → `failed` → повтор → `sent` один раз; сообщение содержит название, сумму, валюту и дату.
 - **Проверка**: тесты зелёные; с реальным токеном в `.env` после `docker compose up` в чат приходит напоминание по сид-платежу «Аренда» ровно один раз (перезапуск worker не даёт дубля).
 
-### Этап 6. Веб-панель: обязательная часть (≈ 6 ч)
-1. Генерация типов из `docs/openapi.yaml`, API-клиент, `AuthProvider`, guards.
-2. Страницы: Login, Dashboard, Occurrences (+ диалоги оплаты/отмены/исправления даты), RecurringPayments (+ форма создания, прекращение), RecurringPaymentDetails, Summary, Users.
-3. Скрытие admin-действий для user; обработка 401/403.
-- **Проверка**: вручную пройти демо-сценарий §0.6 целиком в браузере (admin → создать → Telegram → user → оплатить → просрочка → исправить дату → следующий период); `npm run build` и `tsc --noEmit` без ошибок.
+### Этап 6. Контракт веб-панели на бэкенде (≈ 2.5 ч) — `frontend/` не трогаем
+Цель — чтобы на этапе 12 панель заработала с бэкендом без переделки UI. Всё по §5.4.
+1. Глобальные обработчики ошибок: `HTTPException` и `RequestValidationError` → `{detail, code}`, русские тексты валидации; коды из §5.4.
+2. Схемы ответов Pydantic строго по `frontend/src/api/types.ts`: `User.telegram_linked`, `Occurrence.recurring_payment / paid_by / attachments_count / last_reminder_at`, `OccurrenceDetail.history / reminders`, `RecurringPayment.created_by / next_occurrence`, `Page<T>`.
+3. `GET /auth/me` с `server_today` и `timezone`; `PATCH /auth/me`.
+4. Параметры `GET /payment-occurrences`: повторяемый `currency`, `sort`, `state`; сортировка списка регулярных платежей (активные → по ближайшему сроку).
+5. Rate-limit входа → 429 `rate_limited`; `login_taken`, `not_paid`, `system_user`; запрет удалить самого себя.
+6. Контрактные тесты `tests/api/test_contract.py`: для каждого эндпоинта, который вызывает `frontend/src/api/hooks.ts`, проверяется набор ключей ответа и коды ошибок (по списку §5.4).
+- **Проверка**: `pytest` зелёный; в Swagger ответы совпадают с `types.ts` по именам полей и вложенности.
 
 ### Этап 7. Сиды, OpenAPI-артефакт, README (≈ 2 ч)
 1. `seed.py` (§12), запуск в entrypoint.
 2. `export_openapi.py` → `docs/openapi.yaml`, тест актуальности.
 3. README: краткое описание и **обоснование решений** (архитектура, модель периодов, защита от дублей — жюри оценивает «понятное, обоснованное и работающее решение», слайд 17), требования (Docker), `cp .env.example .env`, получение токена бота и `chat_id`, `docker compose up --build -d`, адреса (панель :8080, Swagger :8080/api/v1/docs, Mailpit :8025), логины, сценарий демонстрации, запуск тестов, переменные окружения, траблшутинг (нет сообщений в Telegram → журнал уведомлений в панели / `docker compose logs worker`).
 4. `docs/demo-scenario.md`.
-- **Проверка**: «чистый» прогон как жюри — `git clone` во временную папку → действия строго по README → всё работает. `docker compose down && docker compose up -d` → данные на месте (персистентность).
+- **Проверка**: «чистый» прогон как жюри — `git clone` во временную папку → действия строго по README → Swagger-часть сценария §0.6 работает (вход admin → создать платёж → напоминание в Telegram → вход user → PATCH оплаты → просроченный период → исправление даты → следующий период). `docker compose down && docker compose up -d` → данные на месте (персистентность). Полный сценарий через веб-панель — на этапе 12.
 
-> **Здесь обязательная часть закрыта.** Ниже — extras в порядке ценности для жюри.
+> **Здесь бэкенд обязательной части закрыт.** Ниже — бэкенд extras (этапы 8–11), затем веб-панель (12–13). Для сдачи обязательной части нужен ещё этап 12: веб-панель — требование кейса.
 
-### Этап 8. Кнопка «Оплачено» в Telegram + привязка аккаунта (≈ 2 ч)
-`telegram_link_codes`, `POST /telegram/link-code`, `/link`, callback `pay:<id>` (§6), редактирование сообщения, страница Settings.
-- **Проверка**: тесты обработчика (привязанный/непривязанный/уже оплачено); вживую — нажатие кнопки отмечает период, в панели статус «Оплачено».
+### Этап 8. Кнопка «Оплачено» в Telegram + привязка аккаунта (≈ 2 ч) — только бэкенд
+`telegram_link_codes`, `POST /telegram/link-code`, `/link`, callback `pay:<id>` (§6), редактирование сообщения. Страница «Настройки → Telegram» в панели уже есть.
+- **Проверка**: тесты обработчика (привязанный/непривязанный/уже оплачено); вживую — код из Swagger → `/link` в боте → нажатие кнопки отмечает период (`GET /payment-occurrences/{id}` → `paid`).
 
-### Этап 9. Календарь, итоги на дату, бюджеты, плановые расходы (≈ 3 ч)
-`/payments/calendar`, `/budgets`, `as_of` в summary, `dates_in_range` для будущих периодов; страницы Calendar и Summary с бюджетами.
-- **Проверка**: тесты календаря/бюджетов; визуально — календарь текущего месяца с сид-данными.
+### Этап 9. Календарь, итоги на дату, бюджеты, плановые расходы (≈ 2.5 ч) — только бэкенд
+`/payments/calendar` (форма §5.4), `/budgets` GET/PUT, `as_of` в summary, `dates_in_range` для будущих периодов.
+- **Проверка**: тесты календаря (созданные периоды + `planned`, конец месяца) и бюджетов (`budget_left`); ответ в Swagger совпадает с `CalendarMonth`/`Budget[]` из `types.ts`.
 
-### Этап 10. Audit log и вложения (≈ 3 ч)
-Запись событий во всех сервисах (§3.1), `/audit-logs`, `/notifications`; вложения (файл/ссылка) с валидацией типа/размера, безопасным именем файла (uuid), скачивание только с авторизацией; UI.
-- **Проверка**: тесты (user не видит audit; загрузка > 10 МБ / exe → 422; скачивание без токена → 401).
+### Этап 10. Audit log и вложения (≈ 2.5 ч) — только бэкенд
+Запись событий во всех сервисах (§3.1) с ключами `details` из §5.4, `/audit-logs`, `/notifications`; вложения (файл/ссылка) с валидацией типа/размера, безопасным именем файла (uuid), скачивание только с авторизацией.
+- **Проверка**: тесты (user не видит audit; загрузка > 10 МБ / exe → 422; скачивание без токена → 401; `history` периода содержит mark_paid/change_paid_date).
 
-### Этап 11. Email, Webhook и уведомления в панели (≈ 3.5 ч)
-`EmailNotifier`, `WebhookNotifier` (HMAC), `InAppNotifier` + таблица `notification_reads`, эндпоинты `/inbox*`, колокольчик в шапке панели; подключение к `ReminderService` как дополнительных каналов, `POST /notifications/test`.
-- **Проверка**: тесты с моками; тест «inapp: повторная проверка не создаёт второе уведомление, прочитанность независима у двух пользователей»; вживую — письмо в Mailpit, запрос на webhook.site, уведомление в колокольчике; дублей нет ни в одном канале.
+### Этап 11. Email, Webhook и уведомления в панели (≈ 3 ч) — только бэкенд
+`EmailNotifier`, `WebhookNotifier` (HMAC), `InAppNotifier` + таблица `notification_reads`, эндпоинты `/inbox*`; подключение к `ReminderService` как дополнительных каналов, `POST /notifications/test`. Колокольчик в панели уже есть.
+- **Проверка**: тесты с моками; тест «inapp: повторная проверка не создаёт второе уведомление, прочитанность независима у двух пользователей»; вживую — письмо в Mailpit, запрос на webhook.site, `GET /inbox` возвращает уведомление; дублей нет ни в одном канале.
 
-### Этап 12. UX-полировка и финальная приёмка (≈ 3 ч)
-Адаптивность, тёмная тема, пустые состояния, тексты; e2e Playwright на демо-сценарий (по возможности); `ruff`, `mypy`, `eslint`; финальный прогон чек-листа §0.5 и сценария §0.6; обновление `docs/openapi.yaml`.
-- **Проверка**: все пункты §14 отмечены.
+> **Точка решения по дизайну.** До этого места `frontend/` не менялся. Перед этапом 12 выбираем: текущий дизайн, готовый редизайн (сделанный параллельно на имитации) или редизайн после сдачи (этап 13).
 
-Итого ≈ 39.5 ч: обязательная часть ≈ 25 ч (этапы 0–7), extras ≈ 14.5 ч. При нехватке времени extras отбрасываются с конца списка; этапы 0–7 не сокращаются.
+### Этап 12. Подключение веб-панели к бэкенду (≈ 4 ч) — ОБЯЗАТЕЛЬНЫЙ
+Работаем с `frontend/`. Слой дизайна не переделываем: только связь с реальным API.
+1. **Локальный запуск против бэкенда.** `frontend/.env.local`: `VITE_API_MOCK=false`, `API_PROXY_TARGET=http://localhost:8000`; `docker compose up db backend worker`; `npm run dev`. Проверить вход/выход: cookie `ik_session` ставится через прокси Vite, `GET /auth/me` после перезагрузки страницы возвращает пользователя, 401 → редирект на `/login?next=…`.
+2. **Сверка контракта по страницам** (каждая — на реальных данных из сида, admin и user):
+   - Вход: неверный пароль → текст ошибки; 6-я попытка за минуту → сообщение `rate_limited`.
+   - Сводка (Dashboard): итоги по 3 валютам, блоки «Просрочено» и «Ближайшие», быстрая оплата.
+   - Платежи (Occurrences): фильтры статус/просрочка/валюты (повтор `currency`)/даты, сортировки, пагинация; диалоги «Оплачено», «Отменить оплату», «Изменить дату»; ошибка `not_paid`.
+   - Карточка периода (PeriodCard): `history`, `reminders`, вложения (файл и ссылка, скачивание).
+   - Регулярные платежи / платёж: создание (admin), прекращение, «показать прекращённые», история периодов; у user кнопок admin нет, а прямой запрос даёт 403.
+   - Календарь, Итоги (`as_of`, бюджеты, `paid_late`), Пользователи (`login_taken`, `system_user`, нельзя удалить себя), Журнал + вкладка «Уведомления» + «Тестовое сообщение», Настройки (`PATCH /auth/me`, код привязки Telegram), колокольчик (`/inbox`, «Прочитать все»).
+   - Найденные расхождения правим по правилу §5.4 и **синхронно обновляем имитацию** (`src/mocks`), чтобы редизайн на имитации видел то же поведение, что и на бэкенде.
+3. **Сверка типов с OpenAPI.** `npx openapi-typescript ../docs/openapi.yaml -o schema.check.d.ts` (временный файл, не коммитим) и сравнение с `src/api/types.ts` (имена полей, nullable, enum). Расхождения → исправить схему бэкенда или `types.ts`.
+4. **Docker-сборка.** `docker compose up --build` → `http://localhost:8080`: панель собрана с `VITE_API_MOCK=false`, `/api/` проксируется nginx, загрузка чека до 10 МБ проходит (`client_max_body_size 12m`).
+5. **Сценарий защиты §0.6 целиком через панель** + Telegram: admin → добавить платёж → напоминание → user → «Оплачено» (в панели и кнопкой в Telegram) → просроченный → исправить дату → следующий период.
+6. **README**: раздел «Веб-панель» — адрес, учётки, режим имитации для разработки дизайна (`npm run dev`, `?reset-demo`); обновить `frontend/README.md`, если контракт уточнялся.
+- **Проверка**: `npm run typecheck && npm run lint && npm test && npm run build` зелёные; сценарий §0.6 пройден в браузере на `:8080`; чек-лист §0.5 отмечен полностью. **После этого этапа решение можно сдавать.**
+
+### Этап 13. Дизайн/UX и финальная приёмка (≈ 3 ч без редизайна; редизайн — отдельная оценка)
+1. **Если выбран редизайн**: меняем только `src/pages`, `src/components`, `src/styles`, `src/theme.ts`; данные берём только через хуки `src/api/hooks.ts`. Разработка — на имитации (`VITE_API_MOCK=true`), проверка — на бэкенде (п. 1 этапа 12). Обязательные поля списка (сумма, валюта, срок, статус, дата оплаты, просрочка) и все действия сценария §0.6 должны остаться.
+2. UX-полировка: адаптивность (ширина телефона), тёмная тема, пустые состояния, скелетоны, подтверждения опасных действий, доступность (фокус, aria).
+3. e2e Playwright на сценарий §0.6 против docker-сборки (по возможности).
+4. Линтеры: `ruff`, `mypy`, `eslint`; финальный «чистый» прогон по README; обновление `docs/openapi.yaml`.
+- **Проверка**: все пункты §14 отмечены; после редизайна повторён пункт 5 этапа 12.
+
+Итого ≈ 39 ч: бэкенд обязательной части ≈ 21 ч (этапы 0–7), бэкенд extras ≈ 10 ч (8–11), веб-панель ≈ 7 ч (12 — обязательный ≈ 4 ч, 13 ≈ 3 ч) + редизайн, если будет. При нехватке времени отбрасываются этапы 8–11 с конца и этап 13; **этапы 0–7 и 12 не сокращаются** — без 12 нет веб-панели, а это критерий приёмки.
 
 ---
 
@@ -716,7 +826,9 @@ UPLOAD_MAX_MB=10
 | Окно «через 3 дня» по выходным/ночью | проверка каждые 1–5 минут и при старте worker'а |
 | Изменение логина админа в `.env` | `bootstrap` переносит `is_system`, старые сессии удаляются |
 | Демо в произвольный день | сид-данные считаются относительно текущей даты |
-| Расхождение фронта и OpenAPI | типы генерируются из `docs/openapi.yaml`, тест актуальности файла |
+| Расхождение панели и бэкенда | контракт §5.4 реализуется на этапе 6, контрактные тесты, сверка типов с OpenAPI и постраничная проверка на этапе 12 |
+| Редизайн ломает работу с API | редизайн трогает только слой дизайна (§9.3), данные — через `src/api/hooks.ts`; имитация API обновляется вместе с бэкендом |
+| Дизайн не утверждён к сдаче | текущий дизайн уже закрывает требования; этап 12 не зависит от редизайна |
 
 ## 16. Решения (Decisions Log)
 - [Стек] Python/FastAPI + PostgreSQL + aiogram + React/Vite/TS — выбрано пользователем; FastAPI даёт OpenAPI/Swagger «из коробки».
@@ -728,8 +840,11 @@ UPLOAD_MAX_MB=10
 - [Сессии] Таблица сессий с opaque-токеном вместо JWT — `logout` действительно завершает сессию, удаление пользователя мгновенно отзывает доступ.
 - [Процессы] Отдельный worker для планировщика и бота — нет дублирования задач при масштабировании API.
 - [Amount snapshot] Сумма/валюта копируются в период — итоги прошлых периодов не меняются задним числом.
+- [Порядок работ] Сначала весь бэкенд (0–11), веб-панель — на этапе 12. Причина: панель уже готова на имитации API, а дизайн не утверждён. Контракт фиксирован в `frontend/src/api` и §5.4, поэтому бэкенд от дизайна не зависит. Отклонено: подключать панель на этапе 6, как в первой версии плана, — это привязало бы бэкенд-работу к неутверждённому дизайну.
+- [Итоги] `overdue` в summary — только неоплаченное; оплата после срока идёт в отдельное поле `paid_late` (как в имитации API панели).
 
 ## 17. Открытые вопросы (не блокируют старт, решения по умолчанию указаны)
-1. Нужно ли редактирование регулярного платежа (PATCH) — кейс не требует; по умолчанию **не делаем**, админ прекращает и создаёт новый. Можно добавить в этапе 12.
+1. Нужно ли редактирование регулярного платежа (PATCH) — кейс не требует; по умолчанию **не делаем**, админ прекращает и создаёт новый. Можно добавить в этапе 13.
 2. Должны ли пользователи без привязки Telegram нажимать «Оплачено» — по умолчанию **нет** (безопасность: в групповом чате могут быть посторонние).
-3. Оплату позже срока показываем как «Оплачено с опозданием» и считаем в `overdue` в итогах — подтвердить на защите.
+3. ~~Оплата позже срока в `overdue` итогов~~ — решено наработкой панели: период показывается как «Оплачено с опозданием» (`is_overdue=true`, `state=paid_late`), а в итогах идёт в `paid_late`, не в `overdue`.
+4. Редизайн веб-панели: делать ли его и когда (параллельно на имитации или на этапе 13) — решение не позже начала этапа 12 (§9.3).
