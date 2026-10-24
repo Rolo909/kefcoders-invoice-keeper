@@ -12,7 +12,6 @@ from app.api.v1 import (
     occurrences,
     payments_summary,
     recurring_payments,
-    teams,
     telegram,
     users,
 )
@@ -36,7 +35,6 @@ protected_router.include_router(attachments.router)
 protected_router.include_router(logs.router)
 protected_router.include_router(inbox.router)
 protected_router.include_router(users.router)
-protected_router.include_router(teams.router)
 protected_router.include_router(telegram.router)
 
 router = APIRouter(prefix=API_PREFIX)

@@ -114,7 +114,7 @@ def _start_bot(settings: Settings) -> asyncio.Task[None] | None:
     if not settings.telegram_enabled or settings.telegram_bot_token is None:
         logger.info("Telegram-бот не запущен: TELEGRAM_BOT_TOKEN не задан")
         return None
-    dispatcher = build_dispatcher(session_factory, settings.timezone, settings.telegram_chat_id)
+    dispatcher = build_dispatcher(session_factory, settings.timezone)
     task = asyncio.create_task(run_bot(settings.telegram_bot_token.get_secret_value(), dispatcher))
     task.add_done_callback(_log_bot_exit)
     return task

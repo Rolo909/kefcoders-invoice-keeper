@@ -5,7 +5,6 @@ from app.models.audit import AuditLog
 from app.models.budget import Budget
 from app.models.notification import Notification, NotificationRead
 from app.models.payment import PaymentOccurrence, RecurringPayment
-from app.models.team import Team
 from app.models.user import Session, TelegramLinkCode, User
 
 __all__ = [
@@ -17,7 +16,6 @@ __all__ = [
     "PaymentOccurrence",
     "RecurringPayment",
     "Session",
-    "Team",
     "TelegramLinkCode",
     "User",
 ]

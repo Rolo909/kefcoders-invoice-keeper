@@ -1,9 +1,7 @@
 """Telegram: привязка аккаунта по одноразовому коду и отметка оплаты кнопкой «Оплачено» в напоминании.
 
 Кнопку может нажать любой участник чата, поэтому оплату отмечает только тот, чей Telegram
-привязан к учётной записи панели и кто состоит в команде этого периода (или администратор), —
-и только в чате этой команды. Так посторонний в чате или участник другой команды оплатить не может,
-а в истории видно, кто именно оплатил.
+привязан к учётной записи панели — так в истории видно, кто именно оплатил.
 """
 
 import secrets
@@ -17,8 +15,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import OccurrenceStatus, Role
-from app.models import PaymentOccurrence, RecurringPayment, Team, TelegramLinkCode, User
+from app.domain.enums import OccurrenceStatus
+from app.models import PaymentOccurrence, RecurringPayment, TelegramLinkCode, User
 from app.services import audit
 from app.services.audit import AuditAction
 
@@ -110,8 +108,6 @@ class PayResult(StrEnum):
     ALREADY_PAID = "already_paid"
     NOT_LINKED = "not_linked"
     NOT_FOUND = "not_found"
-    WRONG_CHAT = "wrong_chat"  # нажали не в чате команды периода
-    NOT_MEMBER = "not_member"  # нажал не участник команды периода
 
 
 @dataclass(frozen=True)
@@ -120,29 +116,6 @@ class PayOutcome:
     user: User | None = None  # кто нажал кнопку
     paid_date: date | None = None
     paid_by: User | None = None  # кто на самом деле отметил оплату (для «Уже оплачено»)
-    team_name: str | None = None
-
-
-@dataclass(frozen=True)
-class PressedIn:
-    """Чат, в котором нажали кнопку: id и, у публичных групп и каналов, @имя."""
-
-    chat_id: int
-    username: str | None = None
-
-
-def is_team_chat(configured: str | None, pressed: PressedIn | None) -> bool:
-    """Нажали в чате команды. В настройке — id чата (-100…) или @имя публичной группы."""
-    if configured is None or pressed is None:
-        return False
-    if configured.startswith("@"):
-        return pressed.username is not None and configured[1:].lower() == pressed.username.lower()
-    return configured == str(pressed.chat_id)
-
-
-def team_chat(team: Team, fallback_chat_id: str | None) -> str | None:
-    """Куда уходят напоминания команды: её чат, а если он не задан — общий TELEGRAM_CHAT_ID."""
-    return team.telegram_chat_id or fallback_chat_id
 
 
 async def mark_paid_from_telegram(
@@ -150,41 +123,28 @@ async def mark_paid_from_telegram(
     occurrence_id: uuid.UUID,
     *,
     telegram_user_id: int,
-    pressed_in: PressedIn | None,
-    fallback_chat_id: str | None,
     today: date,
     now: datetime,
 ) -> PayOutcome:
-    """Отметить период оплаченным сегодняшним числом. Повторное нажатие дату не меняет.
-
-    Проверки по порядку: период есть → Telegram привязан → нажали в чате команды периода →
-    нажал участник этой команды или администратор → период ещё не оплачен. Период заблокирован
-    (FOR UPDATE), поэтому одновременные нажатия отмечают оплату один раз.
-    """
+    """Отметить период оплаченным сегодняшним числом. Повторное нажатие дату не меняет."""
     user = await session.scalar(select(User).where(User.telegram_user_id == telegram_user_id))
     if user is None:
         return PayOutcome(PayResult.NOT_LINKED)
     row = (
         await session.execute(
-            select(PaymentOccurrence, RecurringPayment, Team)
+            select(PaymentOccurrence, RecurringPayment)
             .join(RecurringPayment, RecurringPayment.id == PaymentOccurrence.recurring_payment_id)
-            .join(Team, Team.id == PaymentOccurrence.team_id)
             .where(PaymentOccurrence.id == occurrence_id)
             .with_for_update(of=PaymentOccurrence)
         )
     ).first()
     if row is None:
         return PayOutcome(PayResult.NOT_FOUND, user)
-    occurrence, payment, team = row
-    if not is_team_chat(team_chat(team, fallback_chat_id), pressed_in):
-        # Старое сообщение после смены чата или чужой чат: оплачивать нужно там, куда пришло напоминание.
-        return PayOutcome(PayResult.WRONG_CHAT, user, team_name=team.name)
-    if user.role is not Role.ADMIN and user.team_id != team.id:
-        return PayOutcome(PayResult.NOT_MEMBER, user, team_name=team.name)
+    occurrence, payment = row
     if occurrence.status is OccurrenceStatus.PAID:
         # Кто-то уже оплатил (в том числе одновременно с вами) — дату и автора не трогаем.
         payer = await session.get(User, occurrence.paid_by) if occurrence.paid_by else None
-        return PayOutcome(PayResult.ALREADY_PAID, user, occurrence.paid_date, payer, team.name)
+        return PayOutcome(PayResult.ALREADY_PAID, user, occurrence.paid_date, payer)
 
     occurrence.status = OccurrenceStatus.PAID
     occurrence.paid_date = today
@@ -199,28 +159,7 @@ async def mark_paid_from_telegram(
             "payment_name": payment.name,
             "due_date": occurrence.due_date.isoformat(),
             "paid_date": today.isoformat(),
-            "team_name": team.name,
         },
     )
     await session.commit()
-    return PayOutcome(PayResult.PAID, user, today, user, team.name)
-
-
-# ---------- группа стала супергруппой ----------
-
-
-async def migrate_team_chats(session: AsyncSession, old_chat_id: int, new_chat_id: int) -> list[Team]:
-    """У супергруппы новый id: переносим его в команды, иначе напоминания перестанут доходить."""
-    teams = list(await session.scalars(select(Team).where(Team.telegram_chat_id == str(old_chat_id))))
-    for team in teams:
-        team.telegram_chat_id = str(new_chat_id)
-        audit.record(
-            session,
-            AuditAction.TEAM_UPDATE,
-            actor=None,
-            actor_login="telegram",
-            entity=("team", team.id),
-            details={"name": team.name, "telegram_chat_id": team.telegram_chat_id, "reason": "chat_migrated"},
-        )
-    await session.commit()
-    return teams
+    return PayOutcome(PayResult.PAID, user, today, user)

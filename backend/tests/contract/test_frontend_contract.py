@@ -25,7 +25,7 @@ from app.domain.enums import (
     Period,
     Role,
 )
-from app.models import Team, User
+from app.models import User
 from app.services.notifiers.inapp import InAppNotifier
 from app.services.reminders import ReminderDispatcher
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
@@ -190,12 +190,11 @@ async def test_calendar(api: AsyncClient, tokens: dict[str, str], paid_period: d
     assert any(day["planned"] for day in far["days"])
 
 
-async def test_budgets(api: AsyncClient, tokens: dict[str, str], team: Team) -> None:
+async def test_budgets(api: AsyncClient, tokens: dict[str, str]) -> None:
     items = [
         {"currency": "RUB", "period_type": "month", "year": 2026, "month": 10, "amount": "90000.00"},
         {"currency": "EUR", "period_type": "year", "year": 2026, "month": None, "amount": "700.00"},
     ]
-    items = [{"team_id": str(team.id), **item} for item in items]
     saved = await api.put("/api/v1/budgets", json=items, headers=bearer(tokens["admin"]))
     read = await get(api, tokens["user"], "/budgets", year=2026, month=10)
 
@@ -251,8 +250,6 @@ async def test_inbox_and_channel_check(
 
 # ---------- ошибки: панель различает их по code и показывает detail ----------
 
-TEAM = "<команда из фикстуры>"
-
 
 @pytest.mark.parametrize(
     ("method", "path", "body", "token_name", "status", "code"),
@@ -260,7 +257,7 @@ TEAM = "<команда из фикстуры>"
         ("GET", "/auth/me", None, None, 401, "unauthorized"),
         ("POST", "/auth/login", {"login": USER_LOGIN, "password": "wrong-pass"}, None, 401, "invalid_credentials"),
         ("GET", "/users", None, "user", 403, "forbidden"),
-        ("POST", "/users", {"login": "anna", "password": "long-enough", "team_id": TEAM}, "admin", 409, "login_taken"),
+        ("POST", "/users", {"login": "anna", "password": "long-enough"}, "admin", 409, "login_taken"),
         ("DELETE", "/recurring-payments/00000000-0000-0000-0000-000000000000", None, "admin", 404, "not_found"),
         ("POST", "/recurring-payments", {"name": "x"}, "admin", 422, "validation_error"),
         ("PATCH", "/auth/me", {"email": "admin@kefcoders.ru"}, "admin", 403, "system_user"),
@@ -275,10 +272,7 @@ async def test_error_shape(
     token_name: str | None,
     status: int,
     code: str,
-    team: Team,
 ) -> None:
-    if body is not None and body.get("team_id") == TEAM:
-        body = {**body, "team_id": str(team.id)}
     api.cookies.clear()  # только явный токен: проверяем и запросы без входа
     headers = bearer(tokens[token_name]) if token_name else {}
 

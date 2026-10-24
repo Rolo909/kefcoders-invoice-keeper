@@ -173,17 +173,6 @@ paths:
           default: 0
           title: Offset
         description: Сколько записей пропустить
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -240,17 +229,6 @@ paths:
           type: string
           format: uuid
           title: Payment Id
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -405,17 +383,6 @@ paths:
           default: 0
           title: Offset
         description: Сколько записей пропустить
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -541,17 +508,6 @@ paths:
           description: Итоги на дату; по умолчанию — сегодня
           title: As Of
         description: Итоги на дату; по умолчанию — сегодня
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -584,17 +540,6 @@ paths:
           description: ГГГГ-ММ; по умолчанию — текущий месяц
           title: Month
         description: ГГГГ-ММ; по умолчанию — текущий месяц
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -641,17 +586,6 @@ paths:
           description: По умолчанию — текущий месяц
           title: Month
         description: По умолчанию — текущий месяц
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -980,20 +914,6 @@ paths:
       - logs
       summary: Тестовое сообщение во все каналы — проверка настроек (администратор)
       operationId: test_notifications_api_v1_notifications_test_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Проверить чат и почту этой команды; без него — общий чат из .env
-          title: Team Id
-        description: Проверить чат и почту этой команды; без него — общий чат из .env
       responses:
         '200':
           description: Successful Response
@@ -1001,12 +921,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationTestOut'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/inbox:
     get:
       tags:
@@ -1104,17 +1020,6 @@ paths:
           default: 0
           title: Offset
         description: Сколько записей пропустить
-      - name: team_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
-          title: Team Id
-        description: Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все
       responses:
         '200':
           description: Successful Response
@@ -1219,145 +1124,6 @@ paths:
           description: Администратора из .env нельзя менять или удалять
         '404':
           description: Пользователь не найден
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/teams:
-    get:
-      tags:
-      - teams
-      summary: Список команд (только администратор)
-      operationId: list_teams_api_v1_teams_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 500
-          minimum: 1
-          description: Размер страницы
-          default: 200
-          title: Limit
-        description: Размер страницы
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          description: Сколько записей пропустить
-          default: 0
-          title: Offset
-        description: Сколько записей пропустить
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Page_TeamOut_'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    post:
-      tags:
-      - teams
-      summary: Создание команды (только администратор)
-      description: Общие платежи сразу появляются у новой команды — с ближайшего срока, без долгов за прошлое.
-      operationId: create_team_api_v1_teams_post
-      security:
-      - HTTPBearer: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TeamCreate'
-      responses:
-        '201':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TeamOut'
-        '409':
-          description: team_name_taken — команда с таким названием уже есть
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/teams/{team_id}:
-    patch:
-      tags:
-      - teams
-      summary: Переименование команды или смена её Telegram-чата (только администратор)
-      operationId: update_team_api_v1_teams__team_id__patch
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: team_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Team Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TeamUpdate'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TeamOut'
-        '404':
-          description: Команда не найдена
-        '409':
-          description: team_name_taken — команда с таким названием уже есть
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-    delete:
-      tags:
-      - teams
-      summary: Удаление пустой команды (только администратор)
-      operationId: delete_team_api_v1_teams__team_id__delete
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: team_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          title: Team Id
-      responses:
-        '204':
-          description: Successful Response
-        '404':
-          description: Команда не найдена
-        '409':
-          description: team_not_empty — в команде есть участники, свои платежи, оплаты или чеки
         '422':
           description: Validation Error
           content:
@@ -1490,10 +1256,6 @@ components:
       title: AuditLogOut
     BudgetItem-Input:
       properties:
-        team_id:
-          type: string
-          format: uuid
-          title: Team Id
         currency:
           $ref: '#/components/schemas/Currency'
         period_type:
@@ -1520,7 +1282,6 @@ components:
       additionalProperties: false
       type: object
       required:
-      - team_id
       - currency
       - period_type
       - year
@@ -1529,10 +1290,6 @@ components:
       description: Бюджет валюты на месяц (month — номер месяца) или на год (month — null).
     BudgetItem-Output:
       properties:
-        team_id:
-          type: string
-          format: uuid
-          title: Team Id
         currency:
           $ref: '#/components/schemas/Currency'
         period_type:
@@ -1557,7 +1314,6 @@ components:
       additionalProperties: false
       type: object
       required:
-      - team_id
       - currency
       - period_type
       - year
@@ -1740,8 +1496,6 @@ components:
           type: string
           format: uuid
           title: Occurrence Id
-        team:
-          $ref: '#/components/schemas/TeamBrief'
         kind:
           $ref: '#/components/schemas/NotificationKind'
         created_at:
@@ -1779,7 +1533,6 @@ components:
       required:
       - id
       - occurrence_id
-      - team
       - kind
       - created_at
       - read
@@ -1909,10 +1662,6 @@ components:
           type: string
           format: date
           title: Due Date
-        team:
-          anyOf:
-          - $ref: '#/components/schemas/TeamBrief'
-          - type: 'null'
         channel:
           $ref: '#/components/schemas/NotificationChannel'
         kind:
@@ -1943,7 +1692,6 @@ components:
       - occurrence_id
       - payment_name
       - due_date
-      - team
       - channel
       - kind
       - status
@@ -1982,9 +1730,6 @@ components:
           title: Recurring Payment Id
         recurring_payment:
           $ref: '#/components/schemas/PaymentBrief'
-        team:
-          $ref: '#/components/schemas/TeamBrief'
-          description: Команда, которая платит этот период
         seq:
           type: integer
           title: Seq
@@ -2054,7 +1799,6 @@ components:
       - id
       - recurring_payment_id
       - recurring_payment
-      - team
       - seq
       - due_date
       - amount
@@ -2084,9 +1828,6 @@ components:
           title: Recurring Payment Id
         recurring_payment:
           $ref: '#/components/schemas/PaymentBrief'
-        team:
-          $ref: '#/components/schemas/TeamBrief'
-          description: Команда, которая платит этот период
         seq:
           type: integer
           title: Seq
@@ -2146,7 +1887,6 @@ components:
       - id
       - recurring_payment_id
       - recurring_payment
-      - team
       - seq
       - due_date
       - amount
@@ -2287,29 +2027,6 @@ components:
       - limit
       - offset
       title: Page[RecurringPaymentOut]
-    Page_TeamOut_:
-      properties:
-        items:
-          items:
-            $ref: '#/components/schemas/TeamOut'
-          type: array
-          title: Items
-        total:
-          type: integer
-          title: Total
-        limit:
-          type: integer
-          title: Limit
-        offset:
-          type: integer
-          title: Offset
-      type: object
-      required:
-      - items
-      - total
-      - limit
-      - offset
-      title: Page[TeamOut]
     Page_UserOut_:
       properties:
         items:
@@ -2368,8 +2085,6 @@ components:
           type: string
           format: uuid
           title: Recurring Payment Id
-        team:
-          $ref: '#/components/schemas/TeamBrief'
         name:
           type: string
           title: Name
@@ -2386,7 +2101,6 @@ components:
       type: object
       required:
       - recurring_payment_id
-      - team
       - name
       - due_date
       - amount
@@ -2441,13 +2155,6 @@ components:
           - type: 'null'
           title: End Date
           description: Последняя дата, до которой повторяется платёж
-        team_id:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          title: Team Id
-          description: 'Команда платежа; не передан или null — общий: каждая команда платит за себя'
       additionalProperties: false
       type: object
       required:
@@ -2488,11 +2195,6 @@ components:
             format: date
           - type: 'null'
           title: End Date
-        team:
-          anyOf:
-          - $ref: '#/components/schemas/TeamBrief'
-          - type: 'null'
-          description: Команда платежа; null — общий платёж всех команд
         is_active:
           type: boolean
           title: Is Active
@@ -2527,7 +2229,6 @@ components:
       - period
       - first_due_date
       - end_date
-      - team
       - is_active
       - deleted_at
       - created_by
@@ -2567,11 +2268,6 @@ components:
             format: date
           - type: 'null'
           title: End Date
-        team:
-          anyOf:
-          - $ref: '#/components/schemas/TeamBrief'
-          - type: 'null'
-          description: Команда платежа; null — общий платёж всех команд
         is_active:
           type: boolean
           title: Is Active
@@ -2601,7 +2297,6 @@ components:
       - period
       - first_due_date
       - end_date
-      - team
       - is_active
       - deleted_at
       - created_by
@@ -2649,81 +2344,6 @@ components:
       - from
       - to
       title: SummaryPeriod
-    TeamBrief:
-      properties:
-        id:
-          type: string
-          format: uuid
-          title: Id
-        name:
-          type: string
-          title: Name
-      type: object
-      required:
-      - id
-      - name
-      title: TeamBrief
-    TeamCreate:
-      properties:
-        name:
-          type: string
-          title: Name
-        telegram_chat_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Telegram Chat Id
-      additionalProperties: false
-      type: object
-      required:
-      - name
-      title: TeamCreate
-    TeamOut:
-      properties:
-        id:
-          type: string
-          format: uuid
-          title: Id
-        name:
-          type: string
-          title: Name
-        telegram_chat_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Telegram Chat Id
-          description: Чат напоминаний команды; null — общий чат из .env
-        members_count:
-          type: integer
-          title: Members Count
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-      type: object
-      required:
-      - id
-      - name
-      - telegram_chat_id
-      - members_count
-      - created_at
-      title: TeamOut
-    TeamUpdate:
-      properties:
-        name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Name
-        telegram_chat_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Telegram Chat Id
-      additionalProperties: false
-      type: object
-      title: TeamUpdate
-      description: 'Частичное изменение: учитываются только переданные поля.'
     UserBrief:
       properties:
         id:
@@ -2752,11 +2372,6 @@ components:
         password:
           type: string
           title: Password
-        team_id:
-          type: string
-          format: uuid
-          title: Team Id
-          description: Команда пользователя — обязательна
         full_name:
           anyOf:
           - type: string
@@ -2776,7 +2391,6 @@ components:
       required:
       - login
       - password
-      - team_id
       title: UserCreate
       description: 'Создаётся только обычный пользователь: роли в запросе нет, лишние поля отклоняются.'
     UserOut:
@@ -2803,11 +2417,6 @@ components:
         is_system:
           type: boolean
           title: Is System
-        team:
-          anyOf:
-          - $ref: '#/components/schemas/TeamBrief'
-          - type: 'null'
-          description: Команда пользователя; null — у администратора
         telegram_linked:
           type: boolean
           title: Telegram Linked
@@ -2826,7 +2435,6 @@ components:
       - email
       - role
       - is_system
-      - team
       - telegram_linked
       - notify_email
       - created_at
@@ -2843,13 +2451,6 @@ components:
           - type: string
           - type: 'null'
           title: Password
-        team_id:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
-          title: Team Id
-          description: Перевод в другую команду; прошлые отметки остаются
         full_name:
           anyOf:
           - type: string

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import Currency, NotificationKind, NotificationStatus, OccurrenceStatus, Period
-from app.models import Notification, PaymentOccurrence, RecurringPayment, Team, User
+from app.models import Notification, PaymentOccurrence, RecurringPayment, User
 from app.services.notifiers.base import SendResult
 from app.services.occurrences import ensure_occurrences, update_occurrence
 from app.services.payments import stop_payment
@@ -30,8 +30,6 @@ async def add_payment(
         created_by=author.id,
     )
     session.add(payment)
-    if await session.scalar(select(Team.id).limit(1)) is None:  # периоды создаются у команд
-        session.add(Team(name="Kefcoders", created_at=datetime(2020, 1, 1, tzinfo=UTC)))
     await session.flush()
     await ensure_occurrences(session, [payment], today=today - timedelta(days=10), horizon_days=60)
     return payment

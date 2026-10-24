@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
-from app.models import Team, User
+from app.models import User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 
 
@@ -39,9 +39,8 @@ async def test_broken_json_is_explained(api: AsyncClient) -> None:
     assert detail == "Некорректный JSON в теле запроса"
 
 
-async def test_our_own_rules_are_shown_as_is(api: AsyncClient, admin_token: str, team: Team) -> None:
-    body = {"login": "ab", "password": "long-enough", "team_id": str(team.id)}
-    detail = await detail_of(api, "POST", "/users", admin_token, json=body)
+async def test_our_own_rules_are_shown_as_is(api: AsyncClient, admin_token: str) -> None:
+    detail = await detail_of(api, "POST", "/users", admin_token, json={"login": "ab", "password": "long-enough"})
 
     assert detail == "Логин — от 3 до 64 латинских букв, цифр, точек, дефисов или подчёркиваний"
 

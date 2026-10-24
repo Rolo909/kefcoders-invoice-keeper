@@ -6,7 +6,6 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.enums import Role
-from app.schemas.team import TeamBrief
 
 LOGIN_PATTERN = re.compile(r"^[a-z0-9._-]{3,64}$", re.IGNORECASE)
 EMAIL_PATTERN = re.compile(r"^\S+@\S+\.\S+$")
@@ -67,7 +66,6 @@ class UserOut(UserBrief):
     email: str | None
     role: Role
     is_system: bool
-    team: TeamBrief | None = Field(description="Команда пользователя; null — у администратора")
     telegram_linked: bool
     notify_email: bool
     created_at: datetime
@@ -86,7 +84,6 @@ class UserCreate(BaseModel):
 
     login: str
     password: str
-    team_id: uuid.UUID = Field(description="Команда пользователя — обязательна")
     full_name: str | None = None
     email: str | None = None
     notify_email: bool = False
@@ -110,7 +107,6 @@ class UserUpdate(BaseModel):
 
     login: str | None = None
     password: str | None = None
-    team_id: uuid.UUID | None = Field(default=None, description="Перевод в другую команду; прошлые отметки остаются")
     full_name: str | None = None
     email: str | None = None
     notify_email: bool | None = None

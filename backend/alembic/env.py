@@ -15,8 +15,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
-# Тест миграции на отдельной базе передаёт её адрес через Config.attributes.
-database_url = config.attributes.get("database_url") or get_settings().database_url
+database_url = get_settings().database_url
 
 
 def run_migrations_offline() -> None:

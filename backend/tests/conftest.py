@@ -13,7 +13,6 @@ os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="ik-uploads-")  # чеки т
 import asyncio
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -28,9 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.db import SessionFactory, get_session
 from app.domain.enums import NotificationChannel, Role
 from app.main import create_app
-from app.models import Team, User
+from app.models import User
 from app.security import hash_password
-from app.services.notifiers.base import Reminder, SendResult, TeamTarget
+from app.services.notifiers.base import Reminder, SendResult
 from app.services.reminders import ReminderDispatcher
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
@@ -109,27 +108,9 @@ async def admin(db_session: AsyncSession, password_hashes: dict[str, str]) -> Us
     return user
 
 
-TEAM_NAME = "Kefcoders"
-
-
 @pytest.fixture
-async def team(db_session: AsyncSession) -> Team:
-    """Команда по умолчанию. Создана «давно» — общие платежи у неё со своего первого срока."""
-    created = Team(name=TEAM_NAME, created_at=datetime(2020, 1, 1, tzinfo=UTC))
-    db_session.add(created)
-    await db_session.flush()
-    return created
-
-
-@pytest.fixture
-async def regular_user(db_session: AsyncSession, password_hashes: dict[str, str], team: Team) -> User:
-    user = User(
-        login=USER_LOGIN,
-        password_hash=password_hashes[USER_PASSWORD],
-        role=Role.USER,
-        full_name="Анна",
-        team_id=team.id,
-    )
+async def regular_user(db_session: AsyncSession, password_hashes: dict[str, str]) -> User:
+    user = User(login=USER_LOGIN, password_hash=password_hashes[USER_PASSWORD], role=Role.USER, full_name="Анна")
     db_session.add(user)
     await db_session.flush()
     return user
@@ -142,7 +123,6 @@ class RecordingNotifier:
 
     def __init__(self) -> None:
         self.sent: list[Reminder] = []
-        self.checked: list[TeamTarget | None] = []
         self.failure: SendResult | None = None
 
     async def send(self, reminder: Reminder) -> SendResult:
@@ -151,8 +131,7 @@ class RecordingNotifier:
         self.sent.append(reminder)
         return SendResult(ok=True, telegram_message_id=len(self.sent))
 
-    async def check(self, team: TeamTarget | None = None) -> SendResult:
-        self.checked.append(team)
+    async def check(self) -> SendResult:
         return self.failure or SendResult(ok=True)
 
 
@@ -179,10 +158,8 @@ def reminders(session_factory: SessionFactory, notifier: RecordingNotifier) -> R
 
 
 @pytest.fixture
-async def api(
-    app: FastAPI, db_session: AsyncSession, reminders: ReminderDispatcher, team: Team
-) -> AsyncIterator[AsyncClient]:
-    """Клиент API, все запросы которого идут в транзакцию теста (откатывается после теста). Команда уже есть."""
+async def api(app: FastAPI, db_session: AsyncSession, reminders: ReminderDispatcher) -> AsyncIterator[AsyncClient]:
+    """Клиент API, все запросы которого идут в транзакцию теста (откатывается после теста)."""
 
     async def override() -> AsyncIterator[AsyncSession]:
         yield db_session

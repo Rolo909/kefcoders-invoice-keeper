@@ -13,7 +13,6 @@ from app.domain.enums import BudgetPeriodType, Currency, OccurrenceStatus
 from app.models import Budget, PaymentOccurrence
 from app.schemas.payment import CENT
 from app.services.planning import planned_between
-from app.services.scope import TeamScope
 
 Occ = PaymentOccurrence
 ZERO = Decimal("0.00")
@@ -43,19 +42,16 @@ def _budget_scope(start: date, end: date) -> tuple[BudgetPeriodType, int | None]
     return None
 
 
-async def _budgets(session: AsyncSession, start: date, end: date, teams: TeamScope) -> dict[Currency, Decimal]:
-    """Бюджет по валюте — сумма бюджетов видимых команд, у которых он задан."""
+async def _budgets(session: AsyncSession, start: date, end: date) -> dict[Currency, Decimal]:
     scope = _budget_scope(start, end)
     if scope is None:
         return {}
     period_type, month = scope
     month_condition = Budget.month.is_(None) if month is None else Budget.month == month
     rows = await session.execute(
-        select(Budget.currency, func.sum(Budget.amount))
-        .where(
-            Budget.period_type == period_type, Budget.year == start.year, month_condition, *teams.where(Budget.team_id)
+        select(Budget.currency, Budget.amount).where(
+            Budget.period_type == period_type, Budget.year == start.year, month_condition
         )
-        .group_by(Budget.currency)
     )
     return {currency: amount for currency, amount in rows}
 
@@ -69,13 +65,8 @@ def _count(condition: ColumnElement[bool]) -> ColumnElement[int]:
     return func.count().filter(condition)
 
 
-async def currency_totals(
-    session: AsyncSession, *, start: date, end: date, as_of: date, scope: TeamScope
-) -> list[CurrencyTotals]:
-    """Итоги видимых команд за [start, end] по срокам; «оплачено» и «просрочено» — на дату as_of.
-
-    Для всех команд — сумма итогов каждой команды.
-    """
+async def currency_totals(session: AsyncSession, *, start: date, end: date, as_of: date) -> list[CurrencyTotals]:
+    """Итоги за [start, end] по срокам; «оплачено» и «просрочено» — по состоянию на дату as_of."""
     paid_as_of = and_(Occ.status == OccurrenceStatus.PAID, Occ.paid_date <= as_of)
     overdue = and_(not_(paid_as_of), Occ.due_date < as_of)
     paid_late = and_(paid_as_of, Occ.paid_date > Occ.due_date)
@@ -90,18 +81,18 @@ async def currency_totals(
             _count(overdue),
             _sum(paid_late),
         )
-        .where(Occ.due_date.between(start, end), *scope.where(Occ.team_id))
+        .where(Occ.due_date.between(start, end))
         .group_by(Occ.currency)
     )
     created = {row[0]: row[1:] for row in rows}
 
     planned_sum: dict[Currency, Decimal] = defaultdict(lambda: ZERO)
     planned_count: dict[Currency, int] = defaultdict(int)
-    for item in await planned_between(session, start, end, scope):
+    for item in await planned_between(session, start, end):
         planned_sum[item.payment.currency] += item.payment.amount
         planned_count[item.payment.currency] += 1
 
-    budgets = await _budgets(session, start, end, scope)
+    budgets = await _budgets(session, start, end)
     totals = []
     for currency in Currency:
         total, count, paid, count_paid, overdue_sum, count_overdue, late = created.get(

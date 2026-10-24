@@ -9,7 +9,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import NotificationChannel, NotificationStatus
-from app.models import AuditLog, Notification, PaymentOccurrence, RecurringPayment, Team, User
+from app.models import AuditLog, Notification, PaymentOccurrence, RecurringPayment, User
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ async def list_notifications(
     status: NotificationStatus | None,
     limit: int,
     offset: int,
-) -> tuple[list[tuple[Notification, PaymentOccurrence, RecurringPayment, Team]], int]:
+) -> tuple[list[tuple[Notification, PaymentOccurrence, RecurringPayment]], int]:
     """Напоминания по всем каналам, новые сверху."""
     conditions: list[ColumnElement[bool]] = []
     if channel is not None:
@@ -71,13 +71,12 @@ async def list_notifications(
         conditions.append(Notification.status == status)
     total = await session.scalar(select(func.count()).select_from(Notification).where(*conditions)) or 0
     rows = await session.execute(
-        select(Notification, PaymentOccurrence, RecurringPayment, Team)
+        select(Notification, PaymentOccurrence, RecurringPayment)
         .join(PaymentOccurrence, PaymentOccurrence.id == Notification.occurrence_id)
         .join(RecurringPayment, RecurringPayment.id == PaymentOccurrence.recurring_payment_id)
-        .join(Team, Team.id == PaymentOccurrence.team_id)
         .where(*conditions)
         .order_by(Notification.created_at.desc(), Notification.id)
         .limit(limit)
         .offset(offset)
     )
-    return [(n, o, p, t) for n, o, p, t in rows], total
+    return [(n, o, p) for n, o, p in rows], total

@@ -12,7 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import BudgetPeriodType, Currency
-from app.models import Budget, Team, User
+from app.models import Budget, User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, bearer, login
 
 OCTOBER = {"date_from": "2026-10-01", "date_to": "2026-10-31"}
@@ -140,13 +140,14 @@ async def test_cents_are_summed_exactly(api: AsyncClient, token: str) -> None:
 
 @pytest.mark.usefixtures("october")
 async def test_budget_applies_to_whole_month_or_year_only(
-    api: AsyncClient, token: str, db_session: AsyncSession, team: Team
+    api: AsyncClient, token: str, db_session: AsyncSession
 ) -> None:
-    rub = {"team_id": team.id, "currency": Currency.RUB, "year": 2026}
     db_session.add_all(
         [
-            Budget(**rub, period_type=BudgetPeriodType.MONTH, month=10, amount=Decimal(60000)),
-            Budget(**rub, period_type=BudgetPeriodType.YEAR, amount=Decimal(700000)),
+            Budget(
+                currency=Currency.RUB, period_type=BudgetPeriodType.MONTH, year=2026, month=10, amount=Decimal(60000)
+            ),
+            Budget(currency=Currency.RUB, period_type=BudgetPeriodType.YEAR, year=2026, amount=Decimal(700000)),
         ]
     )
     await db_session.flush()

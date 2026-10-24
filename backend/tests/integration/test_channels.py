@@ -2,7 +2,6 @@
 
 import json
 import uuid
-from dataclasses import replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -21,7 +20,7 @@ from app.config import Settings
 from app.db import SessionFactory
 from app.domain.enums import Currency, NotificationChannel, NotificationKind
 from app.models import Notification, User
-from app.services.notifiers.base import Reminder, TeamTarget
+from app.services.notifiers.base import Reminder
 from app.services.notifiers.email import NO_RECIPIENTS, EmailNotifier
 from app.services.notifiers.inapp import InAppNotifier
 from app.services.notifiers.webhook import SIGNATURE_HEADER, WebhookNotifier, signature
@@ -30,7 +29,6 @@ from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWOR
 
 REMINDER = Reminder(
     occurrence_id=uuid.uuid4(),
-    team=TeamTarget(id=uuid.uuid4(), name="Kefcoders", telegram_chat_id=None),
     kind=NotificationKind.BEFORE_DUE,
     payment_name="Аренда офиса",
     amount=Decimal("50000.00"),
@@ -60,14 +58,10 @@ async def test_email_goes_to_users_with_notifications_and_extra_addresses(
     db_session: AsyncSession, regular_user: User, session_factory: SessionFactory, smtp: AsyncMock
 ) -> None:
     regular_user.email, regular_user.notify_email = "anna@kefcoders.ru", True
-    db_session.add(
-        User(login="maria", password_hash="x", role="user", email="maria@kefcoders.ru", team_id=regular_user.team_id)
-    )
+    db_session.add(User(login="maria", password_hash="x", role="user", email="maria@kefcoders.ru"))
     await db_session.flush()
 
-    own_team = TeamTarget(id=regular_user.team_id, name="Kefcoders", telegram_chat_id=None)  # type: ignore[arg-type]
-    notifier = email_notifier(session_factory, ["boss@kefcoders.ru", "anna@kefcoders.ru"])
-    result = await notifier.send(replace(REMINDER, team=own_team))
+    result = await email_notifier(session_factory, ["boss@kefcoders.ru", "anna@kefcoders.ru"]).send(REMINDER)
 
     assert result.ok
     message, kwargs = smtp.call_args.args[0], smtp.call_args.kwargs

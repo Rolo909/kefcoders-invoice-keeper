@@ -36,13 +36,10 @@ def _when(due: date, today: date) -> str:
 
 def reminder_text_html(reminder: Reminder) -> str:
     name = escape(reminder.payment_name)
-    team = f"Команда: {escape(reminder.team.name)}"
     money = f"{format_money(reminder.amount)} {reminder.currency.value}"
     due = format_date(reminder.due_date)
     if reminder.kind is NotificationKind.OVERDUE:
         late = plural_days((reminder.today - reminder.due_date).days)
-        return (
-            f"⚠️ Просрочена оплата\n<b>{name}</b>\n{team}\nСумма: {money}\nСрок оплаты был: {due} (просрочено на {late})"
-        )
+        return f"⚠️ Просрочена оплата\n<b>{name}</b>\nСумма: {money}\nСрок оплаты был: {due} (просрочено на {late})"
     when = _when(reminder.due_date, reminder.today)
-    return f"🔔 Напоминание об оплате\n<b>{name}</b>\n{team}\nСумма: {money}\nСрок оплаты: {due} ({when})"
+    return f"🔔 Напоминание об оплате\n<b>{name}</b>\nСумма: {money}\nСрок оплаты: {due} ({when})"

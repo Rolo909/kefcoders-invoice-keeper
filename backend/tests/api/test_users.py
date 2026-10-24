@@ -5,15 +5,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, Team, User
+from app.models import AuditLog, User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 
 NEW_USER = {"login": "maria", "password": "maria-password", "full_name": "Мария", "email": "maria@kefcoders.ru"}
-
-
-@pytest.fixture
-def new_user(team: Team) -> dict[str, object]:
-    return {**NEW_USER, "team_id": str(team.id)}
 
 
 @pytest.fixture
@@ -36,20 +31,18 @@ async def user_token(api: AsyncClient, regular_user: User) -> str:
     ],
 )
 async def test_regular_user_cannot_manage_users_via_api(
-    api: AsyncClient, user_token: str, regular_user: User, method: str, path: str, new_user: dict[str, object]
+    api: AsyncClient, user_token: str, regular_user: User, method: str, path: str
 ) -> None:
     response = await api.request(
-        method, path.format(id=regular_user.id), headers=bearer(user_token), json=new_user if method == "POST" else {}
+        method, path.format(id=regular_user.id), headers=bearer(user_token), json=NEW_USER if method == "POST" else {}
     )
 
     assert response.status_code == 403
     assert response.json()["code"] == "forbidden"
 
 
-async def test_admin_creates_regular_user_who_can_log_in(
-    api: AsyncClient, admin_token: str, new_user: dict[str, object]
-) -> None:
-    response = await api.post("/api/v1/users", json=new_user, headers=bearer(admin_token))
+async def test_admin_creates_regular_user_who_can_log_in(api: AsyncClient, admin_token: str) -> None:
+    response = await api.post("/api/v1/users", json=NEW_USER, headers=bearer(admin_token))
 
     assert response.status_code == 201
     created = response.json()
@@ -59,18 +52,14 @@ async def test_admin_creates_regular_user_who_can_log_in(
     await login(api, "maria", "maria-password")
 
 
-async def test_role_cannot_be_set_when_creating_user(
-    api: AsyncClient, admin_token: str, new_user: dict[str, object]
-) -> None:
-    response = await api.post("/api/v1/users", json={**new_user, "role": "admin"}, headers=bearer(admin_token))
+async def test_role_cannot_be_set_when_creating_user(api: AsyncClient, admin_token: str) -> None:
+    response = await api.post("/api/v1/users", json={**NEW_USER, "role": "admin"}, headers=bearer(admin_token))
 
     assert response.status_code == 422
 
 
-async def test_login_must_be_unique_regardless_of_case(
-    api: AsyncClient, admin_token: str, regular_user: User, new_user: dict[str, object]
-) -> None:
-    response = await api.post("/api/v1/users", json={**new_user, "login": "ANNA"}, headers=bearer(admin_token))
+async def test_login_must_be_unique_regardless_of_case(api: AsyncClient, admin_token: str, regular_user: User) -> None:
+    response = await api.post("/api/v1/users", json={**NEW_USER, "login": "ANNA"}, headers=bearer(admin_token))
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Логин «ANNA» уже занят", "code": "login_taken"}
@@ -86,10 +75,8 @@ async def test_login_must_be_unique_regardless_of_case(
         {"email": None, "notify_email": True},
     ],
 )
-async def test_invalid_user_data_is_rejected(
-    api: AsyncClient, admin_token: str, overrides: dict[str, object], new_user: dict[str, object]
-) -> None:
-    response = await api.post("/api/v1/users", json={**new_user, **overrides}, headers=bearer(admin_token))
+async def test_invalid_user_data_is_rejected(api: AsyncClient, admin_token: str, overrides: dict[str, object]) -> None:
+    response = await api.post("/api/v1/users", json={**NEW_USER, **overrides}, headers=bearer(admin_token))
 
     assert response.status_code == 422
 
@@ -164,37 +151,3 @@ async def test_unknown_user_is_not_found(api: AsyncClient, admin_token: str) -> 
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
-
-
-# ---------- команда пользователя ----------
-
-
-@pytest.mark.parametrize("team_id", [None, "missing", str(uuid.UUID(int=1))])
-async def test_user_is_created_only_in_existing_team(
-    api: AsyncClient, admin_token: str, new_user: dict[str, object], team_id: str | None
-) -> None:
-    body = {key: value for key, value in new_user.items() if key != "team_id"}
-    if team_id != "missing":
-        body["team_id"] = team_id
-
-    response = await api.post("/api/v1/users", json=body, headers=bearer(admin_token))
-
-    assert response.status_code == 422
-
-
-async def test_moving_user_to_another_team_is_audited(
-    api: AsyncClient, admin_token: str, regular_user: User, team: Team, db_session: AsyncSession
-) -> None:
-    studio = Team(name="Студия дизайна")
-    db_session.add(studio)
-    await db_session.flush()
-
-    response = await api.patch(
-        f"/api/v1/users/{regular_user.id}", json={"team_id": str(studio.id)}, headers=bearer(admin_token)
-    )
-
-    assert response.status_code == 200
-    assert regular_user.team_id == studio.id
-    details = await db_session.scalar(select(AuditLog.details).where(AuditLog.action == "user.update"))
-    assert details is not None
-    assert (details["old_team"], details["new_team"]) == (team.name, "Студия дизайна")

@@ -17,15 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.domain.enums import Currency, OccurrenceStatus, Period, Role
 from app.errors import AppError
-from app.models import AuditLog, PaymentOccurrence, RecurringPayment, Team, User
+from app.models import AuditLog, PaymentOccurrence, RecurringPayment, User
 from app.services.occurrences import update_occurrence
-from app.services.telegram import PayResult, PressedIn, mark_paid_from_telegram
+from app.services.telegram import PayResult, mark_paid_from_telegram
 from tests.conftest import TEST_DATABASE_URL
 
 TODAY = date(2026, 10, 24)
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 TG_ANNA, TG_MARIA = 777_001, 777_002
-CHAT = -1009990001  # общий чат: у команды теста своего нет
 
 
 @dataclass(frozen=True)
@@ -44,24 +43,11 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     suffix = uuid.uuid4().hex[:8]
     async with sessions() as s:
-        team = Team(name=f"Команда {suffix}")
-        s.add(team)
-        await s.flush()
         anna = User(
-            login=f"anna-{suffix}",
-            password_hash="x",
-            role=Role.USER,
-            full_name="Анна",
-            telegram_user_id=TG_ANNA,
-            team_id=team.id,
+            login=f"anna-{suffix}", password_hash="x", role=Role.USER, full_name="Анна", telegram_user_id=TG_ANNA
         )
         maria = User(
-            login=f"maria-{suffix}",
-            password_hash="x",
-            role=Role.USER,
-            full_name="Мария",
-            telegram_user_id=TG_MARIA,
-            team_id=team.id,
+            login=f"maria-{suffix}", password_hash="x", role=Role.USER, full_name="Мария", telegram_user_id=TG_MARIA
         )
         s.add_all([anna, maria])
         await s.flush()
@@ -77,7 +63,6 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
         await s.flush()
         occurrence = PaymentOccurrence(
             recurring_payment_id=payment.id,
-            team_id=team.id,
             seq=0,
             due_date=payment.first_due_date,
             amount=payment.amount,
@@ -86,7 +71,6 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
         s.add(occurrence)
         await s.commit()
         world = World(sessions, anna.id, maria.id, payment.id, occurrence.id)
-        team_id = team.id
     try:
         yield world
     finally:
@@ -94,7 +78,6 @@ async def world(migrated_db: None) -> AsyncIterator[World]:
             await s.execute(delete(AuditLog).where(AuditLog.entity_id == world.occurrence_id))
             await s.execute(delete(RecurringPayment).where(RecurringPayment.id == world.payment_id))
             await s.execute(delete(User).where(User.id.in_([world.anna_id, world.maria_id])))
-            await s.execute(delete(Team).where(Team.id == team_id))
             await s.commit()
         await engine.dispose()
 
@@ -163,13 +146,7 @@ async def test_bot_second_press_waits_and_gets_already_paid(world: World) -> Non
     async def maria_presses() -> tuple[PayResult, uuid.UUID | None]:
         async with world.sessions() as s:
             outcome = await mark_paid_from_telegram(
-                s,
-                world.occurrence_id,
-                telegram_user_id=TG_MARIA,
-                pressed_in=PressedIn(CHAT),
-                fallback_chat_id=str(CHAT),
-                today=TODAY + timedelta(days=1),
-                now=NOW,
+                s, world.occurrence_id, telegram_user_id=TG_MARIA, today=TODAY + timedelta(days=1), now=NOW
             )
             return outcome.result, outcome.paid_by.id if outcome.paid_by else None
 
@@ -187,13 +164,7 @@ async def test_two_simultaneous_bot_presses_record_exactly_one_payment(world: Wo
     async def press(telegram_id: int) -> PayResult:
         async with world.sessions() as s:
             outcome = await mark_paid_from_telegram(
-                s,
-                world.occurrence_id,
-                telegram_user_id=telegram_id,
-                pressed_in=PressedIn(CHAT),
-                fallback_chat_id=str(CHAT),
-                today=TODAY,
-                now=NOW,
+                s, world.occurrence_id, telegram_user_id=telegram_id, today=TODAY, now=NOW
             )
             return outcome.result
 

@@ -21,8 +21,8 @@ from app.config import Settings
 from app.db import SessionFactory
 from app.domain.enums import NotificationChannel, NotificationKind, NotificationStatus, OccurrenceStatus
 from app.domain.status import today_in
-from app.models import Notification, PaymentOccurrence, RecurringPayment, Team
-from app.services.notifiers.base import Notifier, Reminder, SendResult, TeamTarget
+from app.models import Notification, PaymentOccurrence, RecurringPayment
+from app.services.notifiers.base import Notifier, Reminder, SendResult
 from app.services.notifiers.email import EmailNotifier
 from app.services.notifiers.inapp import InAppNotifier
 from app.services.notifiers.telegram import TelegramNotifier
@@ -158,7 +158,7 @@ async def _store_result(session: AsyncSession, notification_id: uuid.UUID, resul
 
 async def _candidates(
     session: AsyncSession, *, today: date, remind_days_before: int, payment_id: uuid.UUID | None
-) -> list[tuple[PaymentOccurrence, RecurringPayment, Team, NotificationKind]]:
+) -> list[tuple[PaymentOccurrence, RecurringPayment, NotificationKind]]:
     windows = {
         NotificationKind.BEFORE_DUE: (today, today + timedelta(days=remind_days_before)),
         NotificationKind.OVERDUE: (today - timedelta(days=OVERDUE_LOOKBACK_DAYS), today - timedelta(days=1)),
@@ -166,9 +166,8 @@ async def _candidates(
     found = []
     for kind, (start, end) in windows.items():
         stmt = (
-            select(Occ, RecurringPayment, Team)
+            select(Occ, RecurringPayment)
             .join(RecurringPayment, RecurringPayment.id == Occ.recurring_payment_id)
-            .join(Team, Team.id == Occ.team_id)
             .where(
                 Occ.status == OccurrenceStatus.UNPAID,
                 RecurringPayment.deleted_at.is_(None),
@@ -179,7 +178,7 @@ async def _candidates(
         )
         if payment_id is not None:
             stmt = stmt.where(Occ.recurring_payment_id == payment_id)
-        found += [(occurrence, payment, team, kind) for occurrence, payment, team in await session.execute(stmt)]
+        found += [(occurrence, payment, kind) for occurrence, payment in await session.execute(stmt)]
     return found
 
 
@@ -197,11 +196,8 @@ class ReminderDispatcher:
         self._remind_days_before = remind_days_before
         self._timezone = timezone
 
-    async def check_channels(self, team: TeamTarget | None = None) -> list[tuple[NotificationChannel, SendResult]]:
-        """Проверочное сообщение в каждый канал; выключенные — с причиной (кнопка «Тестовое сообщение»).
-
-        С командой — в её чат и её участникам: так проверяют, что чат команды подключён.
-        """
+    async def check_channels(self) -> list[tuple[NotificationChannel, SendResult]]:
+        """Проверочное сообщение в каждый канал; выключенные — с причиной (кнопка «Тестовое сообщение»)."""
         enabled = {notifier.channel: notifier for notifier in self._notifiers}
         results = []
         for channel in NotificationChannel:
@@ -210,7 +206,7 @@ class ReminderDispatcher:
                 results.append((channel, SendResult(ok=False, error=CHANNEL_DISABLED[channel], attempted=False)))
                 continue
             try:
-                results.append((channel, await notifier.check(team)))
+                results.append((channel, await notifier.check()))
             except Exception as exc:  # проверка одного канала не должна мешать остальным
                 logger.exception("Проверка канала %s не удалась", channel)
                 results.append((channel, SendResult(ok=False, error=f"{exc.__class__.__name__}: {exc}")))
@@ -224,10 +220,9 @@ class ReminderDispatcher:
             candidates = await _candidates(
                 session, today=day, remind_days_before=self._remind_days_before, payment_id=payment_id
             )
-            for occurrence, payment, team, kind in candidates:
+            for occurrence, payment, kind in candidates:
                 reminder = Reminder(
                     occurrence_id=occurrence.id,
-                    team=TeamTarget(id=team.id, name=team.name, telegram_chat_id=team.telegram_chat_id),
                     kind=kind,
                     payment_name=payment.name,
                     amount=occurrence.amount,

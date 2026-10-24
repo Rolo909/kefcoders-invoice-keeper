@@ -12,9 +12,7 @@ from app.domain.enums import NotificationChannel, NotificationStatus
 from app.schemas.common import DEFAULT_PAGE_SIZE, LimitQuery, OffsetQuery, Page
 from app.schemas.payment import AuditLogOut, NotificationLogOut
 from app.services import logs as logs_service
-from app.services import teams as teams_service
 from app.services.logs import AuditFilter
-from app.services.notifiers.base import TeamTarget
 
 router = APIRouter(tags=["logs"])
 
@@ -50,7 +48,7 @@ async def notifications(
     rows, total = await logs_service.list_notifications(
         session, channel=channel, status=status, limit=limit, offset=offset
     )
-    items = [notification_out(n, payment_name=p.name, due_date=o.due_date, team=t) for n, o, p, t in rows]
+    items = [notification_out(n, payment_name=p.name, due_date=o.due_date) for n, o, p in rows]
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
@@ -69,17 +67,8 @@ class NotificationTestOut(BaseModel):
     response_model=NotificationTestOut,
     summary="Тестовое сообщение во все каналы — проверка настроек (администратор)",
 )
-async def test_notifications(
-    _: AdminUser,
-    reminders: RemindersDep,
-    session: SessionDep,
-    team_id: Annotated[
-        uuid.UUID | None, Query(description="Проверить чат и почту этой команды; без него — общий чат из .env")
-    ] = None,
-) -> NotificationTestOut:
-    team = None if team_id is None else await teams_service.get_team(session, team_id)
-    target = None if team is None else TeamTarget(id=team.id, name=team.name, telegram_chat_id=team.telegram_chat_id)
-    results = await reminders.check_channels(target)
+async def test_notifications(_: AdminUser, reminders: RemindersDep) -> NotificationTestOut:
+    results = await reminders.check_channels()
     return NotificationTestOut(
         channels=[ChannelCheckOut(channel=channel, ok=r.ok, error=r.error) for channel, r in results]
     )

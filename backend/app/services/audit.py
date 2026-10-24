@@ -27,9 +27,6 @@ class AuditAction(StrEnum):
     BUDGET_UPDATE = "budget.update"
     ATTACHMENT_ADD = "attachment.add"
     ATTACHMENT_DELETE = "attachment.delete"
-    TEAM_CREATE = "team.create"
-    TEAM_UPDATE = "team.update"
-    TEAM_DELETE = "team.delete"
 
 
 def record(
