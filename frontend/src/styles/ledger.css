@@ -131,13 +131,6 @@ a { color: inherit; }
 .who { line-height: 1.2; text-decoration: none; color: inherit; padding: 6px 10px; border-radius: var(--r); }
 .who:hover { background: var(--cover-hover); }
 .who.active b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
-.who-team { display: block; font-size: 12px; opacity: 0.72; }
-/* team picker: the admin chooses whose pages of the notebook to read */
-.team-pick { display: grid; justify-items: start; gap: 3px; padding: 6px 10px; border: 0; border-radius: var(--r); background: transparent; color: inherit; cursor: pointer; text-align: left; }
-.team-pick:hover, .team-pick[aria-expanded='true'] { background: var(--cover-hover); }
-.team-pick .cap { font: 700 11px/1 var(--f-display); text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.72; }
-.team-pick b { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 15px/1.1 var(--f-display); }
-.mast-team { display: none; }
 /* bell: a keycap like the aéza app icon, with its round counter */
 .icon-btn {
   position: relative; width: 40px; height: 40px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 11px; cursor: pointer;
@@ -420,10 +413,6 @@ tr.today-row td { height: 36px; padding: 0; border-bottom: 0; }
   :root { --gutter: 16px; }
   .mast-row { gap: 12px; }
   .who { display: none; }
-  .mast-team-wide { display: none; }
-  .mast-team { display: flex; margin: -8px -10px 0; padding-bottom: 6px; }
-  .mast-team .team-pick { display: flex; align-items: baseline; gap: 8px; }
-  .mast-team .team-pick b { max-width: 60vw; }
   .page { padding: 18px 16px 96px; }
   .page-head h1 { font-size: 30px; }
   .lead { font-size: 16px; }
@@ -511,8 +500,6 @@ tr.today-row td { height: 36px; padding: 0; border-bottom: 0; }
 }
 
 /* users, journal, profile */
-/* team tag: a small index tab naming whose row it is, or that every team pays it */
-.team-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border: 1.5px solid var(--rule-2); border-radius: 6px; color: var(--ink-2); font: 700 11px/1.4 var(--f-display); text-transform: uppercase; letter-spacing: 0.04em; vertical-align: 2px; white-space: nowrap; }
 .env-tag { display: inline-block; margin-left: 8px; padding: 2px 8px; background: var(--key); color: var(--on-key); border-radius: 6px; font: 700 12px/1.4 var(--f-display); box-shadow: inset 0 -2px 0 var(--key-edge); }
 .journal-tabs { display: flex; gap: 26px; border-bottom: 1px solid var(--rule-2); margin: 8px 0 0; }
 .journal-tabs button { background: none; border: 0; padding: 10px 0; cursor: pointer; color: var(--ink-2); font: 700 16px var(--f-display); border-bottom: 3px solid transparent; margin-bottom: -1px; }

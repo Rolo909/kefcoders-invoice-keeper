@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Attachment, Occurrence, RecurringPayment, Team, User } from '../../api/types';
+import type { Attachment, Occurrence, RecurringPayment, User } from '../../api/types';
 
 export type DialogState =
   | { type: 'markPaid'; occ: Occurrence }
@@ -10,9 +10,7 @@ export type DialogState =
   | { type: 'newPayment' }
   | { type: 'stopPayment'; payment: RecurringPayment }
   | { type: 'userForm'; user?: User }
-  | { type: 'deleteUser'; user: User }
-  | { type: 'teamForm'; team?: Team }
-  | { type: 'deleteTeam'; team: Team };
+  | { type: 'deleteUser'; user: User };
 
 export interface DialogsApi {
   dialog: DialogState | null;

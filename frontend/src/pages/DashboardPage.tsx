@@ -3,7 +3,6 @@ import { Button } from '@mantine/core';
 import { useOccurrences, useSummary } from '../api/hooks';
 import type { Currency, Occurrence } from '../api/types';
 import { useAuth } from '../auth/context';
-import { useTeamScope } from '../auth/team';
 import { MarkCell } from '../components/Marks';
 import { MonthTotals } from '../components/MonthTotals';
 import { useDialogs } from '../components/dialogs/context';
@@ -19,13 +18,11 @@ function sums(list: Occurrence[]) {
 
 function Row({ o }: { o: Occurrence }) {
   const { openPeriod } = useDialogs();
-  const { showTeams } = useTeamScope();
   return (
     <tr className={o.state} data-oid={o.id}>
       <td className="date" data-k="date">{shortDate(o.due_date)}</td>
       <td data-k="name">
         <button type="button" className="link name" onClick={() => openPeriod(o.id)}>{o.recurring_payment.name}</button>
-        {showTeams && <span className="team-tag">{o.team.name}</span>}
         {o.recurring_payment.is_deleted && <span className="name-sub">платёж прекращён</span>}
       </td>
       <td className="sum ruled" data-k="sum">{amountShort(o.amount, o.currency)}</td>

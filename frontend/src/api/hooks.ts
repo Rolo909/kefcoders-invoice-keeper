@@ -1,9 +1,8 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useTeamScope } from '../auth/team';
 import { api } from './client';
 import type {
   Attachment, AuditLog, Budget, CalendarMonth, Inbox, LinkCode, LoginResponse, Me, NewPayment, NotificationLog,
-  Occurrence, OccurrenceDetail, OccurrenceQuery, Page, RecurringPayment, RecurringPaymentDetail, Summary, Team, TeamInput, User, UserInput,
+  Occurrence, OccurrenceDetail, OccurrenceQuery, Page, RecurringPayment, RecurringPaymentDetail, Summary, User, UserInput,
 } from './types';
 
 export const qk = {
@@ -11,20 +10,16 @@ export const qk = {
   occurrences: (q?: OccurrenceQuery) => ['occurrences', q ?? {}] as const,
   occurrence: (id: string) => ['occurrence', id] as const,
   payments: (q?: object) => ['recurring-payments', q ?? {}] as const,
-  payment: (id: string, teamId?: string) => ['recurring-payment', id, teamId ?? null] as const,
+  payment: (id: string) => ['recurring-payment', id] as const,
   summary: (q: object) => ['summary', q] as const,
-  calendar: (month: string, teamId?: string) => ['calendar', month, teamId ?? null] as const,
-  budgets: (year: number, month: number, teamId?: string) => ['budgets', year, month, teamId ?? null] as const,
-  users: (teamId?: string) => ['users', teamId ?? null] as const,
-  teams: ['teams'] as const,
+  calendar: (month: string) => ['calendar', month] as const,
+  budgets: (year: number, month: number) => ['budgets', year, month] as const,
+  users: ['users'] as const,
   audit: (q: object) => ['audit-logs', q] as const,
   notifications: (q: object) => ['notifications', q] as const,
   attachments: (occId: string) => ['attachments', occId] as const,
   inbox: ['inbox'] as const,
 };
-
-// Администратор смотрит одну команду или все: выбранная команда уходит в запросы списков и итогов.
-const useTeamId = () => useTeamScope().teamId ?? undefined;
 
 export function invalidatePayments(qc: QueryClient) {
   for (const key of ['occurrences', 'occurrence', 'recurring-payments', 'recurring-payment', 'summary', 'calendar', 'inbox', 'notifications', 'audit-logs']) {
@@ -59,16 +54,13 @@ export function useUpdateMe() {
   });
 }
 
-export function useOccurrences(q: OccurrenceQuery, enabled = true) {
-  // Явная команда в запросе важнее выбранной в шапке: так карточка периода показывает соседние периоды его команды.
-  const query = { team_id: useTeamId(), ...q };
-  return useQuery({
-    queryKey: qk.occurrences(query),
-    queryFn: () => api<Page<Occurrence>>('/payment-occurrences', { query: query as never }),
+export const useOccurrences = (q: OccurrenceQuery, enabled = true) =>
+  useQuery({
+    queryKey: qk.occurrences(q),
+    queryFn: () => api<Page<Occurrence>>('/payment-occurrences', { query: { ...q } as never }),
     placeholderData: keepPreviousData,
     enabled,
   });
-}
 
 export const useOccurrence = (id: string | null) =>
   useQuery({
@@ -88,22 +80,15 @@ export function useUpdateOccurrence() {
   });
 }
 
-export function usePayments(q: { include_deleted?: boolean; q?: string; currency?: string }) {
-  const query = { ...q, team_id: useTeamId() };
-  return useQuery({
-    queryKey: qk.payments(query),
-    queryFn: () => api<Page<RecurringPayment>>('/recurring-payments', { query: { ...query, limit: 200 } }),
+export const usePayments = (q: { include_deleted?: boolean; q?: string; currency?: string }) =>
+  useQuery({
+    queryKey: qk.payments(q),
+    queryFn: () => api<Page<RecurringPayment>>('/recurring-payments', { query: { ...q, limit: 200 } }),
     placeholderData: keepPreviousData,
   });
-}
 
-export function usePayment(id: string) {
-  const teamId = useTeamId();
-  return useQuery({
-    queryKey: qk.payment(id, teamId),
-    queryFn: () => api<RecurringPaymentDetail>(`/recurring-payments/${id}`, { query: { team_id: teamId } }),
-  });
-}
+export const usePayment = (id: string) =>
+  useQuery({ queryKey: qk.payment(id), queryFn: () => api<RecurringPaymentDetail>(`/recurring-payments/${id}`) });
 
 export function useCreatePayment() {
   const qc = useQueryClient();
@@ -121,42 +106,28 @@ export function useStopPayment() {
   });
 }
 
-export function useSummary(q: { date_from: string; date_to: string; as_of?: string }, enabled = true) {
-  const query = { ...q, team_id: useTeamId() };
-  return useQuery({
-    queryKey: qk.summary(query),
-    queryFn: () => api<Summary>('/payments/summary', { query }),
+export const useSummary = (q: { date_from: string; date_to: string; as_of?: string }, enabled = true) =>
+  useQuery({
+    queryKey: qk.summary(q),
+    queryFn: () => api<Summary>('/payments/summary', { query: q }),
     placeholderData: keepPreviousData,
     enabled,
   });
-}
 
-export function useSummaries(ranges: { date_from: string; date_to: string }[]) {
-  const teamId = useTeamId();
-  return useQueries({
-    queries: ranges.map((q) => {
-      const query = { ...q, team_id: teamId };
-      return { queryKey: qk.summary(query), queryFn: () => api<Summary>('/payments/summary', { query }) };
-    }),
+export const useSummaries = (ranges: { date_from: string; date_to: string }[]) =>
+  useQueries({
+    queries: ranges.map((q) => ({ queryKey: qk.summary(q), queryFn: () => api<Summary>('/payments/summary', { query: q }) })),
   });
-}
 
-export function useCalendar(month: string) {
-  const teamId = useTeamId();
-  return useQuery({
-    queryKey: qk.calendar(month, teamId),
-    queryFn: () => api<CalendarMonth>('/payments/calendar', { query: { month, team_id: teamId } }),
+export const useCalendar = (month: string) =>
+  useQuery({
+    queryKey: qk.calendar(month),
+    queryFn: () => api<CalendarMonth>('/payments/calendar', { query: { month } }),
     placeholderData: keepPreviousData,
   });
-}
 
-export function useBudgets(year: number, month: number) {
-  const teamId = useTeamId();
-  return useQuery({
-    queryKey: qk.budgets(year, month, teamId),
-    queryFn: () => api<Budget[]>('/budgets', { query: { year, month, team_id: teamId } }),
-  });
-}
+export const useBudgets = (year: number, month: number) =>
+  useQuery({ queryKey: qk.budgets(year, month), queryFn: () => api<Budget[]>('/budgets', { query: { year, month } }) });
 
 export function useSaveBudgets() {
   const qc = useQueryClient();
@@ -169,14 +140,8 @@ export function useSaveBudgets() {
   });
 }
 
-export function useUsers(enabled = true) {
-  const teamId = useTeamId();
-  return useQuery({
-    queryKey: qk.users(teamId),
-    queryFn: () => api<Page<User>>('/users', { query: { limit: 200, team_id: teamId } }),
-    enabled,
-  });
-}
+export const useUsers = (enabled = true) =>
+  useQuery({ queryKey: qk.users, queryFn: () => api<Page<User>>('/users', { query: { limit: 200 } }), enabled });
 
 export function useSaveUser() {
   const qc = useQueryClient();
@@ -184,8 +149,7 @@ export function useSaveUser() {
     mutationFn: ({ id, ...body }: UserInput & { id?: string }) =>
       id ? api<User>(`/users/${id}`, { method: 'PATCH', body }) : api<User>('/users', { method: 'POST', body }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['users'] });
-      qc.invalidateQueries({ queryKey: qk.teams });
+      qc.invalidateQueries({ queryKey: qk.users });
       qc.invalidateQueries({ queryKey: ['audit-logs'] });
     },
   });
@@ -196,35 +160,7 @@ export function useDeleteUser() {
   return useMutation({
     mutationFn: (id: string) => api<void>(`/users/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['users'] });
-      qc.invalidateQueries({ queryKey: qk.teams });
-      qc.invalidateQueries({ queryKey: ['audit-logs'] });
-    },
-  });
-}
-
-export const useTeams = (enabled = true) =>
-  useQuery({ queryKey: qk.teams, queryFn: () => api<Page<Team>>('/teams', { query: { limit: 200 } }), enabled });
-
-export function useSaveTeam() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...body }: TeamInput & { id?: string }) =>
-      id ? api<Team>(`/teams/${id}`, { method: 'PATCH', body }) : api<Team>('/teams', { method: 'POST', body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.teams });
-      // Новая команда сразу получает общие платежи — периоды и итоги меняются.
-      invalidatePayments(qc);
-    },
-  });
-}
-
-export function useDeleteTeam() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api<void>(`/teams/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.teams });
+      qc.invalidateQueries({ queryKey: qk.users });
       qc.invalidateQueries({ queryKey: ['audit-logs'] });
     },
   });
