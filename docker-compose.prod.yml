@@ -1,0 +1,32 @@
+# Запуск на сервере: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Наружу открыты только 80 и 443 (nginx с сертификатом Let's Encrypt). API, база и Mailpit — только внутри.
+# Docker публикует порты в обход ufw, поэтому лишние порты здесь сброшены, а не закрыты файрволом.
+# Подробно: docs/deploy-vps.md
+
+services:
+  db:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+
+  # На сервере письма уходят через настоящий SMTP (SMTP_* в .env) — ловушка не нужна.
+  mailpit:
+    profiles: ["dev"]
+
+  edge:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/edge.conf:/etc/nginx/conf.d/default.conf:ro
+      # Сертификат выпускает certbot на сервере (см. docs/deploy-vps.md).
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+      - ${CERTBOT_WEBROOT:-/var/www/certbot}:/var/www/certbot:ro

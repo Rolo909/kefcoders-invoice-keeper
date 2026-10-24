@@ -8,6 +8,7 @@
 - Swagger: **http://localhost:8080/api/v1/docs**
 - OpenAPI-спецификация: [`docs/openapi.yaml`](docs/openapi.yaml)
 - Сценарий защиты: [`docs/demo-scenario.md`](docs/demo-scenario.md)
+- Развёртывание на сервере (VPS, HTTPS на IP-адрес): [`docs/deploy-vps.md`](docs/deploy-vps.md)
 - Письма с напоминаниями (Mailpit): **http://localhost:8025**
 
 ## Быстрый старт

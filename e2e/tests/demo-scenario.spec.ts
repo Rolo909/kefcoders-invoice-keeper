@@ -56,8 +56,12 @@ test('3. напоминание уходит сразу и без дублей',
   expect(new Set(channels).size).toBe(channels.length); // по одной записи на канал
   expect(reminders.every((r: { kind: string }) => r.kind === 'before_due')).toBeTruthy();
 
-  const inbox = await admin.get('/inbox');
-  expect(inbox.items.some((i: { payment_name: string }) => i.payment_name === PAYMENT)).toBeTruthy();
+  // Каналы обрабатываются по очереди (Telegram, почта, колокольчик) — ждём, пока дойдёт до колокольчика.
+  await expect
+    .poll(async () => (await admin.get('/inbox')).items.some((i: { payment_name: string }) => i.payment_name === PAYMENT), {
+      timeout: 30_000,
+    })
+    .toBeTruthy();
 });
 
 test('4. пользователь входит и отмечает оплату', async ({ page, request }) => {

@@ -10,6 +10,7 @@ docker run --rm --ipc=host \
   --add-host=host.docker.internal:host-gateway \
   -e E2E_BASE_URL="${E2E_BASE_URL:-http://host.docker.internal:8080}" \
   -e E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-$ADMIN_PASSWORD_FROM_ENV}" \
+  -e E2E_IGNORE_HTTPS_ERRORS \
   -e CI=1 \
   -v "$HERE:/e2e" -v /e2e/node_modules -w /e2e \
   mcr.microsoft.com/playwright:v1.48.2-noble \
