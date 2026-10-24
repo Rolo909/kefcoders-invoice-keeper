@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Query
 from pydantic import BaseModel
 
-MAX_PAGE_SIZE = 200
+MAX_PAGE_SIZE = 500  # сводка веб-панели запрашивает до 500 периодов за раз
 DEFAULT_PAGE_SIZE = 50
 
 LimitQuery = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE, description="Размер страницы")]

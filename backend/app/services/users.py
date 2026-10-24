@@ -95,7 +95,7 @@ async def update_user(
     if data.notify_email is not None:
         user.notify_email = data.notify_email
     if user.notify_email and user.email is None:
-        raise AppError(status.HTTP_422_UNPROCESSABLE_ENTITY, "validation_error", EMAIL_REQUIRED_FOR_NOTIFY)
+        raise AppError(status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", EMAIL_REQUIRED_FOR_NOTIFY)
 
     password_changed = data.password is not None
     if data.password is not None:

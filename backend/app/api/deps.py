@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.config import Settings, get_settings
 from app.db import SessionDep
 from app.domain.enums import Role
+from app.domain.status import today_in
 from app.errors import forbidden, unauthorized
 from app.models import User
 from app.services.auth import AuthContext, LoginRateLimiter, resolve_session
@@ -19,6 +20,14 @@ _bearer = HTTPBearer(auto_error=False, description="Токен из POST /api/v1
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def get_today(settings: SettingsDep) -> date:
+    """«Сегодня» в едином часовом поясе приложения (APP_TIMEZONE)."""
+    return today_in(settings.timezone)
+
+
+TodayDep = Annotated[date, Depends(get_today)]
 
 
 def session_ttl(settings: Settings) -> timedelta:

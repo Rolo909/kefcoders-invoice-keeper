@@ -2,6 +2,7 @@ import uuid
 from enum import StrEnum
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditLog, User
@@ -16,6 +17,11 @@ class AuditAction(StrEnum):
     USER_CREATE = "user.create"
     USER_UPDATE = "user.update"
     USER_DELETE = "user.delete"
+    PAYMENT_CREATE = "payment.create"
+    PAYMENT_DELETE = "payment.delete"
+    OCCURRENCE_MARK_PAID = "occurrence.mark_paid"
+    OCCURRENCE_MARK_UNPAID = "occurrence.mark_unpaid"
+    OCCURRENCE_CHANGE_PAID_DATE = "occurrence.change_paid_date"
 
 
 def record(
@@ -33,6 +39,9 @@ def record(
     entity_type, entity_id = entity if entity is not None else (None, None)
     session.add(
         AuditLog(
+            # clock_timestamp(), а не now(): now() — время начала транзакции, и несколько действий
+            # в одной транзакции получили бы одно время и потеряли порядок.
+            at=func.clock_timestamp(),
             actor_id=actor.id if actor is not None else None,
             actor_login=login[:ACTOR_LOGIN_MAX_LENGTH],
             action=action.value,
