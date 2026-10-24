@@ -5,7 +5,7 @@ import { usePayment } from '../api/hooks';
 import { useAuth } from '../auth/context';
 import { MarkCell } from '../components/Marks';
 import { useDialogs } from '../components/dialogs/context';
-import { amountWithSign, date, dateTime, money, PERIOD_LABEL, plural } from '../lib/format';
+import { amountShort, date, dateTime, PERIOD_LABEL, plural } from '../lib/format';
 
 export function PaymentPage() {
   const { id = '' } = useParams();
@@ -34,13 +34,13 @@ export function PaymentPage() {
         {isAdmin && !p.deleted_at && <div className="actions"><Button variant="outline" color="red" onClick={() => open({ type: 'stopPayment', payment: p })}>Прекратить платёж</Button></div>}
       </div>
       <p className="lead">
-        Оплачено {paid.length} из {p.occurrences.length} {plural(p.occurrences.length, 'периода', 'периодов', 'периодов')} на {money(paidSum, p.currency)}.
+        Оплачено {paid.length} из {p.occurrences.length} {plural(p.occurrences.length, 'периода', 'периодов', 'периодов')} на {amountShort(paidSum, p.currency)}.
         {overdue > 0 && <span className="red"> Просрочено: {overdue}.</span>}
       </p>
       <div className="split" style={{ gridTemplateColumns: 'minmax(0, 340px) minmax(0, 1fr)' }}>
         <section className="params" aria-label="Параметры">
           <dl className="kv">
-            <dt>Сумма</dt><dd className="mono">{money(p.amount, p.currency)}</dd>
+            <dt>Сумма</dt><dd>{amountShort(p.amount, p.currency)}</dd>
             <dt>Периодичность</dt><dd>{PERIOD_LABEL[p.period]}</dd>
             <dt>Первый срок</dt><dd><span className="mono">{date(p.first_due_date)}</span><span className="name-sub">{day31 ? `Все сроки — ${Number(p.first_due_date.slice(8))}-го, в коротких месяцах — последний день` : 'От этой даты считаются все сроки'}</span></dd>
             <dt>Окончание</dt><dd>{p.end_date ? date(p.end_date) : 'Не задано'}</dd>
@@ -58,7 +58,7 @@ export function PaymentPage() {
               {p.occurrences.map((o) => (
                 <tr key={o.id} className={o.state}>
                   <td className="date" data-k="date"><button type="button" className="link mono" onClick={() => openPeriod(o.id)} aria-label={`Период ${date(o.due_date)}`}>{date(o.due_date)}</button></td>
-                  <td className="sum ruled" data-k="sum">{amountWithSign(o.amount, o.currency)}</td>
+                  <td className="sum ruled" data-k="sum">{amountShort(o.amount, o.currency)}</td>
                   <td className="mark" data-k="mark"><MarkCell occ={o} /></td>
                   <td data-k="hide-sm" className="muted">{o.attachments_count ? `${o.attachments_count} ${plural(o.attachments_count, 'файл', 'файла', 'файлов')}` : '—'}</td>
                 </tr>
