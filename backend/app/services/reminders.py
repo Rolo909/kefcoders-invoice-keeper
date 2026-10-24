@@ -44,7 +44,7 @@ def build_notifiers(settings: Settings) -> list[Notifier]:
     notifiers: list[Notifier] = []
     if settings.telegram_enabled:
         token = settings.telegram_bot_token.get_secret_value() if settings.telegram_bot_token else None
-        notifiers.append(TelegramNotifier(token, settings.telegram_chat_id))
+        notifiers.append(TelegramNotifier(token, settings.telegram_chat_id, public_web_url=settings.public_web_url))
     return notifiers
 
 

@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import delete
 
+from app.bot.runner import build_dispatcher, run_bot
 from app.config import Settings, get_settings
 from app.db import engine, session_factory
 from app.domain.status import today_in
@@ -95,12 +96,33 @@ async def main() -> None:
         settings.reminder_check_interval_minutes,
         ", ".join(n.channel.value for n in notifiers) or "нет",
     )
+    bot_task = _start_bot(settings)
     try:
         await stop.wait()
     finally:
         scheduler.shutdown(wait=False)
+        if bot_task is not None:
+            bot_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await bot_task
         await engine.dispose()
         logger.info("Worker остановлен")
+
+
+def _start_bot(settings: Settings) -> asyncio.Task[None] | None:
+    """Бот (кнопка «Оплачено», /link) работает, только если задан токен; иначе worker просто напоминает."""
+    if not settings.telegram_enabled or settings.telegram_bot_token is None:
+        logger.info("Telegram-бот не запущен: TELEGRAM_BOT_TOKEN не задан")
+        return None
+    dispatcher = build_dispatcher(session_factory, settings.timezone)
+    task = asyncio.create_task(run_bot(settings.telegram_bot_token.get_secret_value(), dispatcher))
+    task.add_done_callback(_log_bot_exit)
+    return task
+
+
+def _log_bot_exit(task: asyncio.Task[None]) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.error("Telegram-бот остановился с ошибкой", exc_info=task.exception())
 
 
 if __name__ == "__main__":

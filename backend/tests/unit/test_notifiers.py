@@ -9,7 +9,7 @@ import pytest
 from app.domain.enums import Currency, NotificationKind
 from app.services.notifiers.base import Reminder
 from app.services.notifiers.formatting import format_money, plural_days, reminder_text_html
-from app.services.notifiers.telegram import TelegramNotifier
+from app.services.notifiers.telegram import TelegramNotifier, public_panel_url
 
 TOKEN = "123456:SECRET-TOKEN"
 
@@ -127,3 +127,43 @@ async def test_missing_settings_do_not_count_as_attempt(token: str | None, chat:
     assert (result.ok, result.attempted) == (False, False)
     assert result.error is not None
     assert "TELEGRAM_BOT_TOKEN" in result.error
+
+
+async def test_reminder_has_paid_button_for_this_period() -> None:
+    transport, requests = mock_transport(ok=True, result={"message_id": 1})
+    sent = reminder()
+
+    await TelegramNotifier(TOKEN, "-1", transport=transport).send(sent)
+
+    keyboard = json.loads(requests[0].content)["reply_markup"]["inline_keyboard"]
+    assert keyboard == [[{"text": "✅ Оплачено", "callback_data": f"pay:{sent.occurrence_id}"}]]
+
+
+async def test_panel_link_button_is_added_for_public_address() -> None:
+    transport, requests = mock_transport(ok=True, result={"message_id": 1})
+    sent = reminder()
+
+    await TelegramNotifier(TOKEN, "-1", public_web_url="https://pay.kefcoders.ru/", transport=transport).send(sent)
+
+    keyboard = json.loads(requests[0].content)["reply_markup"]["inline_keyboard"]
+    assert keyboard[1] == [
+        {"text": "Открыть в панели", "url": f"https://pay.kefcoders.ru/occurrences/{sent.occurrence_id}"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("http://localhost:8080", None),
+        ("http://127.0.0.1:8080", None),
+        ("http://192.168.1.10", None),
+        ("http://panel.local", None),
+        ("ftp://pay.kefcoders.ru", None),
+        ("", None),
+        ("https://pay.kefcoders.ru/", "https://pay.kefcoders.ru"),
+        ("http://203.0.113.7:8080", None),
+        ("http://8.8.8.8:8080", "http://8.8.8.8:8080"),
+    ],
+)
+def test_panel_link_only_for_addresses_telegram_accepts(url: str, expected: str | None) -> None:
+    assert public_panel_url(url) == expected

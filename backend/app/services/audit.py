@@ -23,6 +23,7 @@ class AuditAction(StrEnum):
     OCCURRENCE_MARK_PAID = "occurrence.mark_paid"
     OCCURRENCE_MARK_UNPAID = "occurrence.mark_unpaid"
     OCCURRENCE_CHANGE_PAID_DATE = "occurrence.change_paid_date"
+    TELEGRAM_MARK_PAID = "telegram.mark_paid"
 
 
 def record(

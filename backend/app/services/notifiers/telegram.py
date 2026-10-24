@@ -1,11 +1,14 @@
+import ipaddress
 import logging
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from app.domain.enums import NotificationChannel
 from app.services.notifiers.base import Reminder, SendResult
 from app.services.notifiers.formatting import reminder_text_html
+from app.services.telegram import pay_callback_data
 
 TELEGRAM_API = "https://api.telegram.org"
 SEND_TIMEOUT_SECONDS = 10
@@ -14,16 +17,47 @@ NOT_CONFIGURED = "Telegram не настроен: задайте TELEGRAM_BOT_TO
 logger = logging.getLogger(__name__)
 
 
+def public_panel_url(public_web_url: str | None) -> str | None:
+    """Адрес панели для кнопки-ссылки. Telegram отклоняет ссылки на localhost и внутренние адреса."""
+    if not public_web_url:
+        return None
+    parts = urlsplit(public_web_url)
+    host = parts.hostname or ""
+    if parts.scheme not in {"http", "https"} or not host or host == "localhost" or host.endswith(".local"):
+        return None
+    try:
+        if not ipaddress.ip_address(host).is_global:
+            return None
+    except ValueError:
+        pass  # доменное имя
+    return public_web_url.rstrip("/")
+
+
+def reminder_keyboard(reminder: Reminder, panel_url: str | None) -> dict[str, Any]:
+    rows: list[list[dict[str, str]]] = [
+        [{"text": "✅ Оплачено", "callback_data": pay_callback_data(reminder.occurrence_id)}]
+    ]
+    if panel_url:
+        rows.append([{"text": "Открыть в панели", "url": f"{panel_url}/occurrences/{reminder.occurrence_id}"}])
+    return {"inline_keyboard": rows}
+
+
 class TelegramNotifier:
     """Отправляет напоминание в Telegram-чат через Bot API (sendMessage)."""
 
     channel = NotificationChannel.TELEGRAM
 
     def __init__(
-        self, token: str | None, chat_id: str | None, *, transport: httpx.AsyncBaseTransport | None = None
+        self,
+        token: str | None,
+        chat_id: str | None,
+        *,
+        public_web_url: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._token = token
         self._chat_id = chat_id
+        self._panel_url = public_panel_url(public_web_url)
         self._transport = transport
 
     async def _call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -42,6 +76,7 @@ class TelegramNotifier:
             "text": reminder_text_html(reminder),
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "reply_markup": reminder_keyboard(reminder, self._panel_url),
         }
         try:
             body = await self._call("sendMessage", payload)

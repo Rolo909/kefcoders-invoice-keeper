@@ -660,6 +660,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/telegram/link-code:
+    post:
+      tags:
+      - telegram
+      summary: Код для привязки Telegram к своей учётной записи
+      description: Отправьте боту в личном чате команду `/link <код>`. Код действует 10 минут и одноразовый.
+      operationId: link_code_api_v1_telegram_link_code_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkCodeOut'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AuditLogOut:
@@ -815,6 +831,20 @@ components:
       - status
       - db
       title: HealthOut
+    LinkCodeOut:
+      properties:
+        code:
+          type: string
+          title: Code
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - code
+      - expires_at
+      title: LinkCodeOut
     LoginIn:
       properties:
         login:
@@ -1670,5 +1700,7 @@ tags:
   description: Итоги по валютам — отдельно RUB, USD и EUR, без конвертации
 - name: users
   description: Обычные пользователи (только для администратора)
+- name: telegram
+  description: Привязка Telegram для кнопки «Оплачено» в напоминаниях
 - name: health
   description: Проверка работоспособности

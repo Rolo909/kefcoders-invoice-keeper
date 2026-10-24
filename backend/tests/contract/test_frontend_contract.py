@@ -166,6 +166,12 @@ async def test_summary(api: AsyncClient, tokens: dict[str, str], paid_period: di
         assert_matches("CurrencyTotal", total)
 
 
+async def test_telegram_link_code(api: AsyncClient, tokens: dict[str, str]) -> None:
+    response = await api.post("/api/v1/telegram/link-code", headers=bearer(tokens["user"]))
+
+    assert_matches("LinkCode", response.json())
+
+
 # ---------- ошибки: панель различает их по code и показывает detail ----------
 
 

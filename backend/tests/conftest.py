@@ -28,7 +28,7 @@ from app.main import create_app
 from app.models import User
 from app.security import hash_password
 from app.services.notifiers.base import Reminder, SendResult
-from app.services.reminders import ReminderDispatcher
+from app.services.reminders import ReminderDispatcher, SessionFactory
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -136,14 +136,20 @@ def notifier() -> RecordingNotifier:
 
 
 @pytest.fixture
-def reminders(db_session: AsyncSession, notifier: RecordingNotifier) -> ReminderDispatcher:
-    """Диспетчер напоминаний, работающий в транзакции теста."""
+def session_factory(db_session: AsyncSession) -> SessionFactory:
+    """Фабрика сессий для кода, который открывает сессию сам (worker, бот), — в транзакции теста."""
 
     @asynccontextmanager
     async def test_session() -> AsyncIterator[AsyncSession]:
         yield db_session
 
-    return ReminderDispatcher(test_session, [notifier], remind_days_before=3, timezone=ZoneInfo("Europe/Moscow"))
+    return test_session
+
+
+@pytest.fixture
+def reminders(session_factory: SessionFactory, notifier: RecordingNotifier) -> ReminderDispatcher:
+    """Диспетчер напоминаний, работающий в транзакции теста."""
+    return ReminderDispatcher(session_factory, [notifier], remind_days_before=3, timezone=ZoneInfo("Europe/Moscow"))
 
 
 @pytest.fixture
