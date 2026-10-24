@@ -1,8 +1,11 @@
 """Ошибки приложения в едином формате ответа {"detail": "...", "code": "..."} (TASK_PLAN §5.4)."""
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.validation_messages import validation_detail
 
 _CODE_BY_STATUS = {
     status.HTTP_401_UNAUTHORIZED: "unauthorized",
@@ -51,6 +54,15 @@ async def _http_error_handler(_: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(_body(str(exc.detail), code), status_code=exc.status_code, headers=exc.headers)
 
 
+async def _validation_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, RequestValidationError):
+        raise exc
+    return JSONResponse(
+        _body(validation_detail(exc.errors()), "validation_error"), status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, _app_error_handler)
     app.add_exception_handler(StarletteHTTPException, _http_error_handler)
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)

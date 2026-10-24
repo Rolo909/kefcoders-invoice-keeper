@@ -123,3 +123,20 @@ class UserUpdate(BaseModel):
 
     _full_name = field_validator("full_name")(_check_full_name)
     _email = field_validator("email")(_check_email)
+
+
+class ProfileUpdate(BaseModel):
+    """Пользователь сам меняет свою почту для напоминаний (страница «Настройки» панели)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str | None = None
+    notify_email: bool = False
+
+    _email = field_validator("email")(_check_email)
+
+    @model_validator(mode="after")
+    def _email_required_for_notify(self) -> Self:
+        if self.notify_email and self.email is None:
+            raise ValueError(EMAIL_REQUIRED_FOR_NOTIFY)
+        return self

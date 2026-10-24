@@ -503,7 +503,7 @@ AND NOT EXISTS (notification с тем же occurrence_id, channel, kind='before
 
 **Ошибки:** всегда `{detail: string, code: string}`, `detail` — по-русски, готов к показу пользователю. Глобальный обработчик FastAPI переводит `RequestValidationError` в `422 {detail: "…; …", code: "validation_error"}` (тексты как в имитации: «Сумма — больше нуля, не больше двух знаков после запятой» и т. п.). Коды, которые различает панель: `unauthorized` (401), `invalid_credentials` (401), `rate_limited` (429 на вход), `forbidden` (403), `system_user` (403), `not_found` (404), `login_taken` (409), `not_paid` (409), `validation_error` (422).
 
-**Валидация, совпадающая с панелью:** логин `^[a-z0-9._-]{3,64}$` (без учёта регистра, уникален), пароль ≥ 8 символов, email — простой формат; `end_date >= next_due_date`; нельзя удалить самого себя (403 `forbidden`); повторный `DELETE /recurring-payments/{id}` → 204.
+**Валидация, совпадающая с панелью:** логин `^[a-z0-9._-]{3,64}$` (без учёта регистра, уникален), пароль ≥ 8 символов, email — простой формат; `end_date >= next_due_date`; удалить себя невозможно: удаляет только системный админ, а его удаление запрещено (403 `system_user`); повторный `DELETE /recurring-payments/{id}` → 204.
 
 **Демо-учётки** должны совпадать с имитацией: `admin` (из `.env`), `anna`, `maria`, `user` (§12).
 

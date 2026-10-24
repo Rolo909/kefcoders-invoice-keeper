@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.enums import Role
 from app.errors import AppError, not_found
 from app.models import User
-from app.schemas.user import EMAIL_REQUIRED_FOR_NOTIFY, UserCreate, UserUpdate
+from app.schemas.user import EMAIL_REQUIRED_FOR_NOTIFY, ProfileUpdate, UserCreate, UserUpdate
 from app.security import hash_password
 from app.services import audit
 from app.services.audit import AuditAction
@@ -124,3 +124,25 @@ async def delete_user(session: AsyncSession, user_id: uuid.UUID, *, actor: User,
     )
     await session.delete(user)
     await session.commit()
+
+
+async def update_profile(session: AsyncSession, user: User, data: ProfileUpdate, *, ip: str | None) -> User:
+    if user.is_system:
+        raise AppError(
+            status.HTTP_403_FORBIDDEN,
+            "system_user",
+            "Учётная запись администратора задаётся в .env и не меняется через панель",
+        )
+    user.email = data.email
+    user.notify_email = data.notify_email
+    audit.record(
+        session,
+        AuditAction.USER_UPDATE,
+        actor=user,
+        entity=("user", user.id),
+        details={"login": user.login, "email": user.email, "notify_email": user.notify_email},
+        ip=ip,
+    )
+    await session.commit()
+    await session.refresh(user)
+    return user

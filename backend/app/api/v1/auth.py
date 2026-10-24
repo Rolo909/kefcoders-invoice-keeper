@@ -14,8 +14,9 @@ from app.db import SessionDep
 from app.domain.status import today_in
 from app.errors import AppError
 from app.schemas.auth import LoginIn, LoginOut
-from app.schemas.user import MeOut, UserOut
+from app.schemas.user import MeOut, ProfileUpdate, UserOut
 from app.services import audit
+from app.services import users as users_service
 from app.services.audit import AuditAction
 from app.services.auth import authenticate, close_session, open_session
 
@@ -89,3 +90,14 @@ async def logout(auth: CurrentAuth, request: Request, response: Response, sessio
     audit.record(session, AuditAction.LOGOUT, actor=auth.user, entity=("user", auth.user.id), ip=client_ip(request))
     await session.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
+
+
+@router.patch(
+    "/me",
+    response_model=UserOut,
+    summary="Изменение своей почты и напоминаний на почту",
+    responses={status.HTTP_403_FORBIDDEN: {"description": "Администратор из .env не меняется через панель"}},
+)
+async def update_me(body: ProfileUpdate, user: CurrentUser, request: Request, session: SessionDep) -> UserOut:
+    updated = await users_service.update_profile(session, user, body, ip=client_ip(request))
+    return UserOut.model_validate(updated)
