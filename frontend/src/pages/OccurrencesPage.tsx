@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ActionIcon, Button, Menu, NativeSelect, TextInput } from '@mantine/core';
 import { useOccurrences, usePayments } from '../api/hooks';
 import type { Currency, Occurrence, OccurrenceQuery } from '../api/types';
@@ -7,7 +7,7 @@ import { ClipIcon } from '../components/icons';
 import { useDialogs } from '../components/dialogs/context';
 import { useAuth } from '../auth/context';
 import { monthOf, monthRange, shiftMonth } from '../lib/dates';
-import { amountWithSign, CURRENCIES, date, days, PERIOD_LABEL, plural, relative } from '../lib/format';
+import { amountShort, CURRENCIES, date, monthTitle, plural, relative, shortDate } from '../lib/format';
 
 type Filters = { status: '' | 'paid' | 'unpaid'; cur: Currency[]; overdue: boolean; from: string; to: string; pid: string };
 const PER = 20;
@@ -20,7 +20,7 @@ function MarkText({ o }: { o: Occurrence }) {
   return <span className="muted">{relative(o, today)}</span>;
 }
 
-function SortHeader({ label, k, sort, setSort, className }: { label: string; k: 'due_date' | 'amount' | 'days_overdue'; sort: string; setSort: (s: OccurrenceQuery['sort']) => void; className?: string }) {
+function SortHeader({ label, k, sort, setSort, className }: { label: string; k: 'due_date' | 'amount'; sort: string; setSort: (s: OccurrenceQuery['sort']) => void; className?: string }) {
   const active = sort.replace('-', '') === k;
   const asc = !sort.startsWith('-');
   return (
@@ -57,6 +57,7 @@ export function OccurrencesPage() {
   const total = list.data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PER));
   const items = list.data?.items ?? [];
+  const byMonth = sort === 'due_date' || sort === '-due_date';
 
   return (
     <>
@@ -71,8 +72,8 @@ export function OccurrencesPage() {
       <form id="flt" className={`filters${showFilters ? ' open' : ''}`} onSubmit={(e) => e.preventDefault()} aria-label="Фильтры">
         <div className="grp"><span id="f-st">Статус</span>
           <div className="seg" role="group" aria-labelledby="f-st">
-            {([['', 'Все'], ['unpaid', 'Не оплачено'], ['paid', 'Оплачено']] as const).map(([v, l]) => (
-              <button key={v} type="button" aria-pressed={f.status === v} onClick={() => set({ status: v })}>{l}</button>
+            {([['', false, 'Все'], ['unpaid', false, 'Не оплачено'], ['unpaid', true, 'Просрочено'], ['paid', false, 'Оплачено']] as const).map(([v, od, l]) => (
+              <button key={l} type="button" aria-pressed={f.status === v && f.overdue === od} onClick={() => set({ status: v, overdue: od })}>{l}</button>
             ))}
           </div>
         </div>
@@ -82,9 +83,6 @@ export function OccurrencesPage() {
               <button key={c} type="button" className="chip" aria-pressed={f.cur.includes(c)} onClick={() => set({ cur: f.cur.includes(c) ? f.cur.filter((x) => x !== c) : [...f.cur, c] })}>{c}</button>
             ))}
           </div>
-        </div>
-        <div className="grp"><span id="f-od">Просрочка</span>
-          <div role="group" aria-labelledby="f-od"><button type="button" className="chip" aria-pressed={f.overdue} onClick={() => set({ overdue: !f.overdue })}>Только с просрочкой</button></div>
         </div>
         <TextInput type="date" label="Срок с" value={f.from} onChange={(e) => set({ from: e.currentTarget.value })} w={140} classNames={{ input: 'mono' }} />
         <TextInput type="date" label="по" value={f.to} onChange={(e) => set({ to: e.currentTarget.value })} w={140} classNames={{ input: 'mono' }} />
@@ -96,7 +94,7 @@ export function OccurrencesPage() {
       {list.isSuccess && !items.length ? (
         <div className="empty">
           <h2>Нет периодов по этим фильтрам</h2>
-          <p>Срок {date(f.from)}–{date(f.to)}{f.overdue ? ', только с просрочкой' : ''}{f.cur.length ? `, ${f.cur.join(', ')}` : ''}.</p>
+          <p>Срок {date(f.from)}–{date(f.to)}{f.overdue ? ', только просроченные' : ''}{f.cur.length ? `, ${f.cur.join(', ')}` : ''}.</p>
           <Button variant="outline" onClick={() => { setF(base); setPageNo(0); }}>Сбросить фильтры</Button>
         </div>
       ) : (
@@ -109,40 +107,43 @@ export function OccurrencesPage() {
                 <th scope="col">Платёж</th>
                 <SortHeader label="Сумма" k="amount" sort={sort!} setSort={setSort} className="r" />
                 <th scope="col">Отметка</th>
-                <SortHeader label="Просрочка" k="days_overdue" sort={sort!} setSort={setSort} />
                 <th scope="col"><span className="sr-only">Вложения</span></th>
                 <th scope="col"><span className="sr-only">Действия</span></th>
               </tr>
             </thead>
             <tbody>
-              {items.map((o) => (
-                <tr key={o.id} className={o.state}>
-                  <td className="date" data-k="date">{date(o.due_date)}</td>
-                  <td data-k="name">
-                    <button type="button" className="link name" onClick={() => openPeriod(o.id)}>{o.recurring_payment.name}</button>
-                    <span className="name-sub">{PERIOD_LABEL[o.recurring_payment.period]}{o.recurring_payment.is_deleted ? ' · прекращён' : ''}</span>
-                  </td>
-                  <td className="sum" data-k="sum">{amountWithSign(o.amount, o.currency)}</td>
-                  <td data-k="mark" style={{ width: 330 }}><MarkText o={o} /></td>
-                  <td data-k="hide-sm" className={o.days_overdue ? 'red' : undefined} style={{ whiteSpace: 'nowrap' }}>{o.days_overdue ? days(o.days_overdue) : '—'}</td>
-                  <td data-k="hide-sm">{o.attachments_count > 0 && <span className="muted" aria-label={`Вложений: ${o.attachments_count}`} style={{ display: 'inline-flex', gap: 4 }}><ClipIcon /><span aria-hidden="true">{o.attachments_count}</span></span>}</td>
-                  <td className="acts" data-k="more">
-                    {!o.paid_date ? (
-                      <MarkButton occ={o} />
-                    ) : (
-                      <Menu>
-                        <Menu.Target>
-                          <ActionIcon variant="subtle" color="gray" aria-label={`Действия с оплатой: ${o.recurring_payment.name}, срок ${date(o.due_date)}`}>⋯</ActionIcon>
-                        </Menu.Target>
-                        <Menu.Dropdown>
-                          <Menu.Item onClick={() => open({ type: 'changeDate', occ: o })}>Изменить дату оплаты</Menu.Item>
-                          <Menu.Item onClick={() => open({ type: 'attach', occ: o })}>Прикрепить чек или ссылку</Menu.Item>
-                          <Menu.Item c="var(--red)" onClick={() => open({ type: 'unmark', occ: o })}>Снять отметку</Menu.Item>
-                        </Menu.Dropdown>
-                      </Menu>
-                    )}
-                  </td>
-                </tr>
+              {items.map((o, i) => (
+                <Fragment key={o.id}>
+                  {byMonth && o.due_date.slice(0, 7) !== items[i - 1]?.due_date.slice(0, 7) && (
+                    <tr className="month-row"><th colSpan={6} scope="colgroup">{monthTitle(o.due_date.slice(0, 7))}</th></tr>
+                  )}
+                  <tr className={o.state}>
+                    <td className="date" data-k="date">{byMonth ? shortDate(o.due_date) : date(o.due_date)}</td>
+                    <td data-k="name">
+                      <button type="button" className="link name" onClick={() => openPeriod(o.id)}>{o.recurring_payment.name}</button>
+                      {o.recurring_payment.is_deleted && <span className="name-sub">платёж прекращён</span>}
+                    </td>
+                    <td className="sum" data-k="sum">{amountShort(o.amount, o.currency)}</td>
+                    <td data-k="mark" style={{ width: 330 }}><MarkText o={o} /></td>
+                    <td data-k="hide-sm">{o.attachments_count > 0 && <span className="muted" aria-label={`Вложений: ${o.attachments_count}`} style={{ display: 'inline-flex', gap: 4 }}><ClipIcon /><span aria-hidden="true">{o.attachments_count}</span></span>}</td>
+                    <td className="acts" data-k="more">
+                      {!o.paid_date ? (
+                        <MarkButton occ={o} quiet={o.state === 'upcoming'} />
+                      ) : (
+                        <Menu>
+                          <Menu.Target>
+                            <ActionIcon variant="subtle" color="gray" aria-label={`Действия с оплатой: ${o.recurring_payment.name}, срок ${date(o.due_date)}`}>⋯</ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item onClick={() => open({ type: 'changeDate', occ: o })}>Изменить дату оплаты</Menu.Item>
+                            <Menu.Item onClick={() => open({ type: 'attach', occ: o })}>Прикрепить чек или ссылку</Menu.Item>
+                            <Menu.Item c="var(--red)" onClick={() => open({ type: 'unmark', occ: o })}>Снять отметку</Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
+                      )}
+                    </td>
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

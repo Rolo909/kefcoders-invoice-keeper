@@ -4,15 +4,15 @@ import { Link } from 'react-router-dom';
 import { useInbox, useReadInbox } from '../api/hooks';
 import type { InboxItem } from '../api/types';
 import { useAuth } from '../auth/context';
-import { date, dateTime, money, relative } from '../lib/format';
+import { amountShort, date, dateTime, relative } from '../lib/format';
 import { BellIcon } from './icons';
 
 function line(i: InboxItem, today: string) {
   if (i.paid_date) return { text: `Уже оплачено ${date(i.paid_date)}`, red: false };
   if (i.payment_deleted) return { text: 'Платёж прекращён', red: false };
-  if (i.occurrence_state === 'overdue') return { text: `Просрочено: ${money(i.amount, i.currency)}, срок был ${date(i.due_date)}`, red: true };
+  if (i.occurrence_state === 'overdue') return { text: `Просрочено: ${amountShort(i.amount, i.currency)}, срок был ${date(i.due_date)}`, red: true };
   const rel = relative({ state: i.occurrence_state, due_date: i.due_date, paid_date: null, days_overdue: 0 }, today);
-  return { text: `${money(i.amount, i.currency)} · срок ${date(i.due_date)}, ${rel}`, red: false };
+  return { text: `${amountShort(i.amount, i.currency)} · срок ${date(i.due_date)}, ${rel}`, red: false };
 }
 
 export function Bell() {

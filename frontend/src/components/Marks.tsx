@@ -1,7 +1,7 @@
 import { Button } from '@mantine/core';
 import type { Occurrence } from '../api/types';
 import { useToday } from '../auth/context';
-import { date, days, relative, shortDate, statusLine } from '../lib/format';
+import { date, days, relative, shortDate } from '../lib/format';
 import { isFresh, stampStyle } from '../lib/hits';
 import { useDialogs } from './dialogs/context';
 
@@ -70,5 +70,8 @@ export function MarkCell({ occ, canMark = true }: { occ: Occurrence; canMark?: b
 
 export function StatusText({ occ }: { occ: Occurrence }) {
   const today = useToday();
-  return <span className={`st ${occ.state}`}>{statusLine(occ, today)}</span>;
+  const text = occ.paid_date
+    ? `оплачено ${shortDate(occ.paid_date)}${occ.state === 'paid_late' ? `, позже на ${days(occ.days_overdue)}` : ''}`
+    : relative(occ, today);
+  return <span className={`st ${occ.state}`}>{text}</span>;
 }

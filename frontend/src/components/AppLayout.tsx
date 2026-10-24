@@ -1,7 +1,6 @@
 import { Button, Menu } from '@mantine/core';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/context';
-import { longDate, weekday } from '../lib/format';
 import { Bell } from './Bell';
 import { useDialogs } from './dialogs/context';
 
@@ -18,7 +17,7 @@ const ADMIN = [
 ];
 
 export function AppLayout() {
-  const { user, isAdmin, today } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { open } = useDialogs();
   const location = useLocation();
   const moreItems = [MAIN[4], ...(isAdmin ? ADMIN : []), { to: '/settings', label: 'Профиль' }];
@@ -31,11 +30,9 @@ export function AppLayout() {
       <header className="mast">
         <div className="mast-row">
           <Link className="brand" to="/">Invoice Keeper</Link>
-          <span className="today">{weekday(today)}, {longDate(today)} {today.slice(0, 4)}</span>
           <Bell />
-          <NavLink className={({ isActive }) => `who${isActive ? ' active' : ''}`} to="/settings">
+          <NavLink className={({ isActive }) => `who${isActive ? ' active' : ''}`} to="/settings" aria-label={`${user?.full_name ?? user?.login}, профиль`}>
             <b>{user?.full_name ?? user?.login}</b>
-            <small>профиль · {user?.login}</small>
           </NavLink>
           {isAdmin && <Button variant="filled" onClick={() => open({ type: 'newPayment' })}>Новый платёж</Button>}
         </div>
