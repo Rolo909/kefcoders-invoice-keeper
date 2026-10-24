@@ -8,6 +8,8 @@ from app.api.v1 import API_PREFIX
 from app.api.v1 import router as api_v1_router
 from app.config import get_settings
 from app.db import engine
+from app.errors import register_error_handlers
+from app.services.auth import LoginRateLimiter
 
 
 @asynccontextmanager
@@ -29,6 +31,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
         lifespan=lifespan,
     )
+    app.state.login_limiter = LoginRateLimiter()
+    register_error_handlers(app)
     app.include_router(api_v1_router)
     return app
 

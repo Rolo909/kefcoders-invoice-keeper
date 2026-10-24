@@ -1,0 +1,44 @@
+import uuid
+from enum import StrEnum
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import AuditLog, User
+
+ACTOR_LOGIN_MAX_LENGTH = 64
+
+
+class AuditAction(StrEnum):
+    LOGIN = "auth.login"
+    LOGIN_FAILED = "auth.login_failed"
+    LOGOUT = "auth.logout"
+    USER_CREATE = "user.create"
+    USER_UPDATE = "user.update"
+    USER_DELETE = "user.delete"
+
+
+def record(
+    session: AsyncSession,
+    action: AuditAction,
+    *,
+    actor: User | None,
+    actor_login: str | None = None,
+    entity: tuple[str, uuid.UUID] | None = None,
+    details: dict[str, Any] | None = None,
+    ip: str | None = None,
+) -> None:
+    """Добавляет запись журнала в текущую транзакцию — она сохранится вместе с самим действием."""
+    login = actor.login if actor is not None else (actor_login or "")
+    entity_type, entity_id = entity if entity is not None else (None, None)
+    session.add(
+        AuditLog(
+            actor_id=actor.id if actor is not None else None,
+            actor_login=login[:ACTOR_LOGIN_MAX_LENGTH],
+            action=action.value,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=details or {},
+            ip=ip,
+        )
+    )

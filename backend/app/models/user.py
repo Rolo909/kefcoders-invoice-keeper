@@ -30,6 +30,10 @@ class User(UuidPkMixin, CreatedAtMixin, Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    @property
+    def telegram_linked(self) -> bool:
+        return self.telegram_user_id is not None
+
 
 class Session(UuidPkMixin, CreatedAtMixin, Base):
     __tablename__ = "sessions"

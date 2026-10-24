@@ -20,7 +20,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import make_url, pool, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.db import get_session
+from app.domain.enums import Role
 from app.main import create_app
+from app.models import User
+from app.security import hash_password
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -74,3 +78,56 @@ async def db_session(migrated_db: None) -> AsyncIterator[AsyncSession]:
             await session.close()
             await transaction.rollback()
     await engine.dispose()
+
+
+# ---------- API поверх тестовой БД ----------
+
+ADMIN_LOGIN = "admin"
+ADMIN_PASSWORD = "admin-password-1"
+USER_LOGIN = "anna"
+USER_PASSWORD = "anna-password-1"
+
+
+@pytest.fixture(scope="session")
+def password_hashes() -> dict[str, str]:
+    """argon2 медленный намеренно — считаем хеши один раз на прогон."""
+    return {password: hash_password(password) for password in (ADMIN_PASSWORD, USER_PASSWORD)}
+
+
+@pytest.fixture
+async def admin(db_session: AsyncSession, password_hashes: dict[str, str]) -> User:
+    user = User(login=ADMIN_LOGIN, password_hash=password_hashes[ADMIN_PASSWORD], role=Role.ADMIN, is_system=True)
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+@pytest.fixture
+async def regular_user(db_session: AsyncSession, password_hashes: dict[str, str]) -> User:
+    user = User(login=USER_LOGIN, password_hash=password_hashes[USER_PASSWORD], role=Role.USER, full_name="Анна")
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+@pytest.fixture
+async def api(app: FastAPI, db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    """Клиент API, все запросы которого идут в транзакцию теста (откатывается после теста)."""
+
+    async def override() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_session] = override
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        yield http
+
+
+async def login(api: AsyncClient, login_name: str, password: str) -> str:
+    response = await api.post("/api/v1/auth/login", json={"login": login_name, "password": password})
+    assert response.status_code == 200, response.text
+    token: str = response.json()["access_token"]
+    return token
+
+
+def bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
