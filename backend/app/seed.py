@@ -28,6 +28,7 @@ from app.db import engine, session_factory
 from app.domain.enums import BudgetPeriodType, Currency, OccurrenceStatus, Period, Role
 from app.domain.schedule import add_months_clamped, due_date
 from app.domain.status import today_in
+from app.logging_setup import configure_logging
 from app.models import Budget, PaymentOccurrence, RecurringPayment, User
 from app.security import hash_password
 from app.services import audit
@@ -268,7 +269,7 @@ async def seed_demo_data(session: AsyncSession, *, today: date, tz: ZoneInfo) ->
 
 async def main() -> None:
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configure_logging(settings.log_level)
     if not settings.seed_demo_data:
         logger.info("SEED_DEMO_DATA=false — тестовые данные не создаются")
         return

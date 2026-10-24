@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db import engine, session_factory
 from app.domain.enums import Role
+from app.logging_setup import configure_logging
 from app.models import User
 from app.security import LOCKED_PASSWORD_HASH, hash_password, verify_password
 from app.services.auth import find_user_by_login, revoke_user_sessions
@@ -60,7 +61,7 @@ async def sync_system_admin(session: AsyncSession, login: str, password: str) ->
 
 async def main() -> None:
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configure_logging(settings.log_level)
     try:
         async with session_factory() as session:
             await sync_system_admin(session, settings.admin_login, settings.admin_password.get_secret_value())

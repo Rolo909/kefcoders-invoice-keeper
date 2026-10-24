@@ -19,6 +19,7 @@ from app.bot.runner import build_dispatcher, run_bot
 from app.config import Settings, get_settings
 from app.db import engine, session_factory
 from app.domain.status import today_in
+from app.logging_setup import configure_logging
 from app.models import Session, TelegramLinkCode
 from app.services.occurrences import ensure_occurrences
 from app.services.reminders import ReminderDispatcher, build_notifiers
@@ -76,7 +77,7 @@ def build_scheduler(settings: Settings, dispatcher: ReminderDispatcher) -> Async
 
 async def main() -> None:
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    configure_logging(settings.log_level)
     notifiers = build_notifiers(settings, session_factory)
     dispatcher = ReminderDispatcher(
         session_factory, notifiers, remind_days_before=settings.remind_days_before, timezone=settings.timezone
