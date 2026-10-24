@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
 from app.bot.handlers import build_router
-from app.services.reminders import SessionFactory
+from app.db import SessionFactory
 
 logger = logging.getLogger(__name__)
 

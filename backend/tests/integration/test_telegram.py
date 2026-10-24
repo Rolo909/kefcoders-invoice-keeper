@@ -16,10 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import handlers
+from app.db import SessionFactory
 from app.domain.enums import Currency, OccurrenceStatus, Period
 from app.models import AuditLog, PaymentOccurrence, RecurringPayment, User
 from app.services.occurrences import ensure_occurrences
-from app.services.reminders import SessionFactory
 from app.services.telegram import (
     LinkResult,
     PayResult,

@@ -907,6 +907,88 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/notifications/test:
+    post:
+      tags:
+      - logs
+      summary: Тестовое сообщение во все каналы — проверка настроек (администратор)
+      operationId: test_notifications_api_v1_notifications_test_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationTestOut'
+      security:
+      - HTTPBearer: []
+  /api/v1/inbox:
+    get:
+      tags:
+      - inbox
+      summary: Уведомления в колокольчике панели (последние 30)
+      operationId: inbox_api_v1_inbox_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: unread_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Только непрочитанные
+          default: false
+          title: Unread Only
+        description: Только непрочитанные
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/inbox/read-all:
+    post:
+      tags:
+      - inbox
+      summary: Отметить все уведомления прочитанными
+      operationId: read_all_api_v1_inbox_read_all_post
+      responses:
+        '204':
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+  /api/v1/inbox/{notification_id}/read:
+    post:
+      tags:
+      - inbox
+      summary: Отметить уведомление прочитанным
+      operationId: read_one_api_v1_inbox__notification_id__read_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Notification Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/users:
     get:
       tags:
@@ -1284,6 +1366,24 @@ components:
       - month
       - days
       title: CalendarMonthOut
+    ChannelCheckOut:
+      properties:
+        channel:
+          $ref: '#/components/schemas/NotificationChannel'
+        ok:
+          type: boolean
+          title: Ok
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - channel
+      - ok
+      - error
+      title: ChannelCheckOut
     Currency:
       type: string
       enum:
@@ -1385,6 +1485,79 @@ components:
       - status
       - db
       title: HealthOut
+    InboxItemOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        occurrence_id:
+          type: string
+          format: uuid
+          title: Occurrence Id
+        kind:
+          $ref: '#/components/schemas/NotificationKind'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        read:
+          type: boolean
+          title: Read
+        payment_name:
+          type: string
+          title: Payment Name
+        amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Amount
+        currency:
+          $ref: '#/components/schemas/Currency'
+        due_date:
+          type: string
+          format: date
+          title: Due Date
+        occurrence_state:
+          $ref: '#/components/schemas/OccurrenceState'
+        paid_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Paid Date
+        payment_deleted:
+          type: boolean
+          title: Payment Deleted
+      type: object
+      required:
+      - id
+      - occurrence_id
+      - kind
+      - created_at
+      - read
+      - payment_name
+      - amount
+      - currency
+      - due_date
+      - occurrence_state
+      - paid_date
+      - payment_deleted
+      title: InboxItemOut
+    InboxOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/InboxItemOut'
+          type: array
+          title: Items
+        unread_count:
+          type: integer
+          title: Unread Count
+      type: object
+      required:
+      - items
+      - unread_count
+      title: InboxOut
     LinkCodeOut:
       properties:
         code:
@@ -1533,6 +1706,17 @@ components:
       - sent
       - failed
       title: NotificationStatus
+    NotificationTestOut:
+      properties:
+        channels:
+          items:
+            $ref: '#/components/schemas/ChannelCheckOut'
+          type: array
+          title: Channels
+      type: object
+      required:
+      - channels
+      title: NotificationTestOut
     OccurrenceDetailOut:
       properties:
         id:
@@ -2333,6 +2517,8 @@ tags:
   description: Чек (файл) или ссылка к конкретной оплате
 - name: logs
   description: Журнал входов и действий, журнал напоминаний (администратор)
+- name: inbox
+  description: 'Колокольчик панели: уведомления о сроках, отметки «прочитано»'
 - name: telegram
   description: Привязка Telegram для кнопки «Оплачено» в напоминаниях
 - name: health

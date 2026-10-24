@@ -33,6 +33,7 @@ OPENAPI_TAGS = [
     {"name": "users", "description": "Обычные пользователи (только для администратора)"},
     {"name": "attachments", "description": "Чек (файл) или ссылка к конкретной оплате"},
     {"name": "logs", "description": "Журнал входов и действий, журнал напоминаний (администратор)"},
+    {"name": "inbox", "description": "Колокольчик панели: уведомления о сроках, отметки «прочитано»"},
     {"name": "telegram", "description": "Привязка Telegram для кнопки «Оплачено» в напоминаниях"},
     {"name": "health", "description": "Проверка работоспособности"},
 ]
@@ -61,7 +62,7 @@ def create_app() -> FastAPI:
     app.state.login_limiter = LoginRateLimiter()
     app.state.reminders = ReminderDispatcher(
         session_factory,
-        build_notifiers(settings),
+        build_notifiers(settings, session_factory),
         remind_days_before=settings.remind_days_before,
         timezone=settings.timezone,
     )

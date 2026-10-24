@@ -57,6 +57,14 @@ services:
     ports:
       - "8080:8080"
 
+  # Почтовый сервер-ловушка: письма с напоминаниями видны в веб-интерфейсе http://localhost:8025.
+  # Для настоящей почты укажите в .env свой SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
 volumes:
   pgdata:
   uploads:

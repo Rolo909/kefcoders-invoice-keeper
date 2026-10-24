@@ -40,6 +40,8 @@ FIELD_LABELS = {
     "actor_id": "Кто",
     "channel": "Канал",
     "attachment_id": "Идентификатор",
+    "notification_id": "Идентификатор",
+    "unread_only": "Только непрочитанные",
     "user_id": "Идентификатор",
     "payment_id": "Идентификатор",
     "occurrence_id": "Идентификатор",

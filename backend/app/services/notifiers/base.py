@@ -33,3 +33,7 @@ class Notifier(Protocol):
     channel: NotificationChannel
 
     async def send(self, reminder: Reminder) -> SendResult: ...
+
+    async def check(self) -> SendResult:
+        """Проверочное сообщение — кнопка «Тестовое сообщение» в журнале панели."""
+        ...

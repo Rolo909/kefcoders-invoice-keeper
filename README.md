@@ -8,6 +8,7 @@
 - Swagger: **http://localhost:8080/api/v1/docs**
 - OpenAPI-спецификация: [`docs/openapi.yaml`](docs/openapi.yaml)
 - Сценарий защиты: [`docs/demo-scenario.md`](docs/demo-scenario.md)
+- Письма с напоминаниями (Mailpit): **http://localhost:8025**
 
 ## Быстрый старт
 
@@ -65,6 +66,20 @@ docker compose ps
 а в сообщении появляется «✅ Оплачено: имя, дата». Если `PUBLIC_WEB_URL` — публичный адрес панели,
 в напоминании есть ещё кнопка «Открыть в панели» (для `localhost` Telegram такие ссылки не принимает).
 
+### Другие каналы напоминаний
+
+Напоминание уходит во все включённые каналы одновременно; у каждого канала своя запись в журнале,
+поэтому сбой одного не мешает остальным, а дублей нет ни в одном.
+
+| Канал | Как включить | Где видно |
+|---|---|---|
+| Колокольчик в панели | включён всегда (`INAPP_ENABLED=true`), настройки не нужны | значок в шапке панели; «прочитано» у каждого пользователя своё |
+| Почта | `EMAIL_ENABLED=true`; письма получают пользователи, включившие их в «Профиле», и адреса из `EMAIL_EXTRA_RECIPIENTS` | по умолчанию — Mailpit, http://localhost:8025; для настоящей почты задайте `SMTP_*` |
+| Webhook | `WEBHOOK_URL` (и `WEBHOOK_SECRET` для подписи) | POST JSON `{"event": "payment.reminder", …}`, подпись — заголовок `X-InvoiceKeeper-Signature: sha256=<HMAC тела>` |
+
+Проверить настройки: «Журнал» → «Уведомления» → «Тестовое сообщение» (или `POST /api/v1/notifications/test`) —
+по каждому каналу видно, дошло ли сообщение или почему нет.
+
 ## Учётные записи и тестовые данные
 
 При первом запуске (`SEED_DEMO_DATA=true`) создаются тестовые данные — даты считаются от сегодняшнего дня,
@@ -115,8 +130,9 @@ docker compose ps
 |---|---|
 | `frontend` | веб-панель (React), nginx на порту 8080 проксирует `/api/` в backend |
 | `backend` | API на FastAPI; при старте применяет миграции, синхронизирует администратора из `.env` и создаёт тестовые данные |
-| `worker` | проверяет сроки и отправляет напоминания |
+| `worker` | проверяет сроки и отправляет напоминания; Telegram-бот (кнопка «Оплачено», `/link`) |
 | `db` | PostgreSQL 16 |
+| `mailpit` | почтовый сервер-ловушка для демонстрации писем, интерфейс на порту 8025 |
 
 Стек: Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, PostgreSQL 16, APScheduler, Telegram Bot API;
 React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план и решения — [`TASK_PLAN.md`](TASK_PLAN.md).
@@ -151,6 +167,7 @@ React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план
 `GET` / `POST /payment-occurrences/{id}/attachments`, `GET /attachments/{id}/download`, `DELETE /attachments/{id}`
 (чек — PDF, PNG, JPG, WebP до 10 МБ — или ссылка к оплате; удалить может автор или администратор),
 `GET /audit-logs`, `GET /notifications` (журнал входов и действий, журнал напоминаний — для администратора),
+`POST /notifications/test` (проверка каналов), `GET /inbox`, `POST /inbox/{id}/read`, `POST /inbox/read-all` (колокольчик),
 `GET /health`. Полная спецификация — [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ## Настройки (`.env`)
@@ -167,8 +184,11 @@ React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | — | база данных |
 | `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | `true`, —, — | напоминания в Telegram |
 | `UPLOAD_MAX_MB` | `10` | максимальный размер чека; файлы хранятся в Docker-томе `uploads` |
-
-Остальные переменные в `.env.example` относятся к дополнительным каналам уведомлений.
+| `PUBLIC_WEB_URL` | `http://localhost:8080` | адрес панели для кнопки «Открыть в панели» в Telegram |
+| `EMAIL_ENABLED`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS` | `true`, `mailpit`, `1025`, —, —, …, `false` | письма; по умолчанию — Mailpit |
+| `EMAIL_EXTRA_RECIPIENTS` | — | дополнительные адреса через запятую |
+| `WEBHOOK_URL`, `WEBHOOK_SECRET` | —, — | webhook и ключ подписи |
+| `INAPP_ENABLED` | `true` | колокольчик в панели |
 
 ## Если что-то не работает
 
@@ -176,7 +196,7 @@ React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план
 |---|---|
 | Порт 8080, 8000 или 5432 занят | Остановите программу, которая его занимает, или поменяйте левую часть `ports` в `docker-compose.yml` |
 | `backend` не становится `healthy` | `docker compose logs backend` — чаще всего `ADMIN_PASSWORD` короче 8 символов или не задан `POSTGRES_PASSWORD` |
-| Напоминания не приходят в Telegram | Откройте период → «Напоминания»: там видна причина. Проверьте токен и `chat_id`, бот должен быть участником чата. Логи: `docker compose logs worker` |
+| Напоминания не приходят в Telegram | Откройте период → «Напоминания»: там видна причина. Проверьте токен и `chat_id`, бот должен быть участником чата. Логи: `docker compose logs worker`. «Тестовое сообщение» в «Журнале» покажет причину по каждому каналу |
 | Поменяли `.env`, а изменений нет | `docker compose up -d` — сервисы перечитают `.env` |
 | Нужна чистая база | `docker compose down -v`, затем `docker compose up -d` |
 

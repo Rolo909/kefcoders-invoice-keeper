@@ -3,8 +3,9 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
-from app.api.deps import AdminUser, SettingsDep
+from app.api.deps import AdminUser, RemindersDep, SettingsDep
 from app.api.v1.presenters import audit_log_out, notification_out
 from app.db import SessionDep
 from app.domain.enums import NotificationChannel, NotificationStatus
@@ -49,3 +50,25 @@ async def notifications(
     )
     items = [notification_out(n, payment_name=p.name, due_date=o.due_date) for n, o, p in rows]
     return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+class ChannelCheckOut(BaseModel):
+    channel: NotificationChannel
+    ok: bool
+    error: str | None
+
+
+class NotificationTestOut(BaseModel):
+    channels: list[ChannelCheckOut]
+
+
+@router.post(
+    "/notifications/test",
+    response_model=NotificationTestOut,
+    summary="Тестовое сообщение во все каналы — проверка настроек (администратор)",
+)
+async def test_notifications(_: AdminUser, reminders: RemindersDep) -> NotificationTestOut:
+    results = await reminders.check_channels()
+    return NotificationTestOut(
+        channels=[ChannelCheckOut(channel=channel, ok=r.ok, error=r.error) for channel, r in results]
+    )

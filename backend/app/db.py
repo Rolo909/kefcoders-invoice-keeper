@@ -1,4 +1,5 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Annotated
 
 from fastapi import Depends
@@ -32,3 +33,6 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+# Фабрика сессий для кода вне HTTP-запроса (worker, бот, отправщики): `async with factory() as session`.
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]

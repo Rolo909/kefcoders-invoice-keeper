@@ -24,13 +24,13 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import make_url, pool, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.db import get_session
+from app.db import SessionFactory, get_session
 from app.domain.enums import NotificationChannel, Role
 from app.main import create_app
 from app.models import User
 from app.security import hash_password
 from app.services.notifiers.base import Reminder, SendResult
-from app.services.reminders import ReminderDispatcher, SessionFactory
+from app.services.reminders import ReminderDispatcher
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -130,6 +130,9 @@ class RecordingNotifier:
             return self.failure
         self.sent.append(reminder)
         return SendResult(ok=True, telegram_message_id=len(self.sent))
+
+    async def check(self) -> SendResult:
+        return self.failure or SendResult(ok=True)
 
 
 @pytest.fixture

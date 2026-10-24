@@ -15,10 +15,10 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, Message
 
+from app.db import SessionFactory
 from app.domain.status import today_in
 from app.models import User
 from app.services.notifiers.formatting import format_date
-from app.services.reminders import SessionFactory
 from app.services.telegram import (
     PAY_CALLBACK_PREFIX,
     LinkResult,

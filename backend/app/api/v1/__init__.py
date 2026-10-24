@@ -7,6 +7,7 @@ from app.api.v1 import (
     budgets,
     calendar,
     health,
+    inbox,
     logs,
     occurrences,
     payments_summary,
@@ -32,6 +33,7 @@ protected_router.include_router(calendar.router)
 protected_router.include_router(budgets.router)
 protected_router.include_router(attachments.router)
 protected_router.include_router(logs.router)
+protected_router.include_router(inbox.router)
 protected_router.include_router(users.router)
 protected_router.include_router(telegram.router)
 

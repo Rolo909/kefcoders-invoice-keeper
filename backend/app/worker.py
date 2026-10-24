@@ -77,7 +77,7 @@ def build_scheduler(settings: Settings, dispatcher: ReminderDispatcher) -> Async
 async def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    notifiers = build_notifiers(settings)
+    notifiers = build_notifiers(settings, session_factory)
     dispatcher = ReminderDispatcher(
         session_factory, notifiers, remind_days_before=settings.remind_days_before, timezone=settings.timezone
     )

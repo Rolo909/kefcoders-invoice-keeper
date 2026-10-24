@@ -13,6 +13,7 @@ from app.services.telegram import pay_callback_data
 TELEGRAM_API = "https://api.telegram.org"
 SEND_TIMEOUT_SECONDS = 10
 NOT_CONFIGURED = "Telegram не настроен: задайте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env"
+CHECK_TEXT = "✅ Проверка связи: Invoice Keeper пишет в этот чат напоминания об оплате."
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +70,17 @@ class TelegramNotifier:
         return body
 
     async def send(self, reminder: Reminder) -> SendResult:
+        return await self._send_message(
+            {"text": reminder_text_html(reminder), "reply_markup": reminder_keyboard(reminder, self._panel_url)}
+        )
+
+    async def check(self) -> SendResult:
+        return await self._send_message({"text": CHECK_TEXT})
+
+    async def _send_message(self, content: dict[str, Any]) -> SendResult:
         if not self._token or not self._chat_id:
             return SendResult(ok=False, error=NOT_CONFIGURED, attempted=False)
-        payload = {
-            "chat_id": self._chat_id,
-            "text": reminder_text_html(reminder),
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-            "reply_markup": reminder_keyboard(reminder, self._panel_url),
-        }
+        payload = {"chat_id": self._chat_id, "parse_mode": "HTML", "disable_web_page_preview": True, **content}
         try:
             body = await self._call("sendMessage", payload)
         except (httpx.HTTPError, ValueError) as exc:  # сеть, таймаут или не-JSON ответ

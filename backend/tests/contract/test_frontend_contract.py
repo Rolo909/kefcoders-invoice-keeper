@@ -12,8 +12,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import time_machine
+from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.db import SessionFactory
 from app.domain.enums import (
     Currency,
     NotificationChannel,
@@ -24,6 +26,8 @@ from app.domain.enums import (
     Role,
 )
 from app.models import User
+from app.services.notifiers.inapp import InAppNotifier
+from app.services.reminders import ReminderDispatcher
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 from tests.contract.ts_types import TYPES_TS, interfaces, unions
 
@@ -218,6 +222,30 @@ async def test_attachments_and_logs(api: AsyncClient, tokens: dict[str, str], pa
     assert notifications["items"]
     for reminder in notifications["items"]:
         assert_matches("NotificationLog", reminder)
+
+
+async def test_inbox_and_channel_check(
+    app: FastAPI, api: AsyncClient, tokens: dict[str, str], session_factory: SessionFactory
+) -> None:
+    app.state.reminders = ReminderDispatcher(
+        session_factory, [InAppNotifier()], remind_days_before=3, timezone=ZoneInfo("Europe/Moscow")
+    )
+    created = await api.post(
+        "/api/v1/recurring-payments",
+        json={"name": "Интернет", "amount": "3900", "currency": "RUB", "next_due_date": "2026-10-16"},
+        headers=bearer(tokens["admin"]),
+    )
+    assert created.status_code == 201
+    inbox = await get(api, tokens["user"], "/inbox")
+    check = await api.post("/api/v1/notifications/test", headers=bearer(tokens["admin"]))
+
+    assert_matches("Inbox", inbox)
+    assert inbox["items"]
+    for item in inbox["items"]:
+        assert_matches("InboxItem", item)
+    assert set(check.json()) == {"channels"}
+    for channel in check.json()["channels"]:
+        assert set(channel) == {"channel", "ok", "error"}
 
 
 # ---------- ошибки: панель различает их по code и показывает detail ----------

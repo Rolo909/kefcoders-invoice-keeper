@@ -8,29 +8,38 @@
 
 import logging
 import uuid
-from collections.abc import Callable, Sequence
-from contextlib import AbstractAsyncContextManager
+from collections.abc import Sequence
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
+from pydantic import SecretStr
 from sqlalchemy import ColumnElement, and_, exists, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.db import SessionFactory
 from app.domain.enums import NotificationChannel, NotificationKind, NotificationStatus, OccurrenceStatus
 from app.domain.status import today_in
 from app.models import Notification, PaymentOccurrence, RecurringPayment
 from app.services.notifiers.base import Notifier, Reminder, SendResult
+from app.services.notifiers.email import EmailNotifier
+from app.services.notifiers.inapp import InAppNotifier
 from app.services.notifiers.telegram import TelegramNotifier
+from app.services.notifiers.webhook import WebhookNotifier
 
 MAX_ATTEMPTS = 5
 # Отправка, начатая упавшим процессом, через это время забирается заново.
 STALE_CLAIM = timedelta(minutes=5)
 # Сообщение о просрочке — один раз, если срок прошёл не больше этого числа дней назад.
 OVERDUE_LOOKBACK_DAYS = 3
+CHANNEL_DISABLED = {
+    NotificationChannel.TELEGRAM: "Канал выключен: TELEGRAM_ENABLED=false",
+    NotificationChannel.EMAIL: "Канал выключен: EMAIL_ENABLED=false",
+    NotificationChannel.WEBHOOK: "WEBHOOK_URL не задан",
+    NotificationChannel.INAPP: "Канал выключен: INAPP_ENABLED=false",
+}
 
-SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 Occ = PaymentOccurrence
 _channel_type = Notification.__table__.c.channel.type
@@ -40,11 +49,36 @@ _status_type = Notification.__table__.c.status.type
 logger = logging.getLogger(__name__)
 
 
-def build_notifiers(settings: Settings) -> list[Notifier]:
+def _secret(value: SecretStr | None) -> str | None:
+    return value.get_secret_value() if value else None
+
+
+def build_notifiers(settings: Settings, session_factory: SessionFactory) -> list[Notifier]:
+    """Включённые каналы. Сбой одного канала не мешает остальным — у каждого своя запись в журнале."""
     notifiers: list[Notifier] = []
     if settings.telegram_enabled:
-        token = settings.telegram_bot_token.get_secret_value() if settings.telegram_bot_token else None
-        notifiers.append(TelegramNotifier(token, settings.telegram_chat_id, public_web_url=settings.public_web_url))
+        notifiers.append(
+            TelegramNotifier(
+                _secret(settings.telegram_bot_token), settings.telegram_chat_id, public_web_url=settings.public_web_url
+            )
+        )
+    if settings.email_enabled:
+        notifiers.append(
+            EmailNotifier(
+                session_factory,
+                host=settings.smtp_host,
+                port=settings.smtp_port,
+                sender=settings.smtp_from,
+                username=settings.smtp_user,
+                password=_secret(settings.smtp_password),
+                start_tls=settings.smtp_tls,
+                extra_recipients=settings.extra_email_recipients,
+            )
+        )
+    if settings.webhook_url:
+        notifiers.append(WebhookNotifier(settings.webhook_url, _secret(settings.webhook_secret)))
+    if settings.inapp_enabled:
+        notifiers.append(InAppNotifier())
     return notifiers
 
 
@@ -161,6 +195,22 @@ class ReminderDispatcher:
         self._notifiers = notifiers
         self._remind_days_before = remind_days_before
         self._timezone = timezone
+
+    async def check_channels(self) -> list[tuple[NotificationChannel, SendResult]]:
+        """Проверочное сообщение в каждый канал; выключенные — с причиной (кнопка «Тестовое сообщение»)."""
+        enabled = {notifier.channel: notifier for notifier in self._notifiers}
+        results = []
+        for channel in NotificationChannel:
+            notifier = enabled.get(channel)
+            if notifier is None:
+                results.append((channel, SendResult(ok=False, error=CHANNEL_DISABLED[channel], attempted=False)))
+                continue
+            try:
+                results.append((channel, await notifier.check()))
+            except Exception as exc:  # проверка одного канала не должна мешать остальным
+                logger.exception("Проверка канала %s не удалась", channel)
+                results.append((channel, SendResult(ok=False, error=f"{exc.__class__.__name__}: {exc}")))
+        return results
 
     async def run(self, *, today: date | None = None, payment_id: uuid.UUID | None = None) -> int:
         """Отправить все положенные напоминания (или только по одному платежу). Возвращает число отправленных."""
