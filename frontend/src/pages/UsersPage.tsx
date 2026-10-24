@@ -17,13 +17,12 @@ function Users() {
       </div>
       <table className="ledger stack" style={{ marginTop: 20 }}>
         <caption className="sr-only">Пользователи</caption>
-        <thead><tr><th scope="col">Пользователь</th><th scope="col">Команда</th><th scope="col">Почта</th><th scope="col">Telegram</th><th scope="col">Роль</th><th scope="col">Создан</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead>
+        <thead><tr><th scope="col">Пользователь</th><th scope="col">Почта</th><th scope="col">Telegram</th><th scope="col">Роль</th><th scope="col">Создан</th><th scope="col"><span className="sr-only">Действия</span></th></tr></thead>
         <tbody>
-          {users.isPending && <tr><td colSpan={7}><span className="sk" style={{ width: '50%' }} /></td></tr>}
+          {users.isPending && <tr><td colSpan={6}><span className="sk" style={{ width: '50%' }} /></td></tr>}
           {(users.data?.items ?? []).map((u) => (
             <tr key={u.id}>
               <td data-k="name"><b>{u.full_name || u.login}</b><span className="name-sub mono">{u.login}</span></td>
-              <td data-k="sum" className={u.team ? undefined : 'muted'}>{u.team?.name ?? 'все команды'}</td>
               <td data-k="hide-sm">{u.email || '—'}{u.email && <span className="name-sub">{u.notify_email ? 'напоминания приходят на почту' : 'напоминания на почту выключены'}</span>}</td>
               <td data-k="hide-sm" className={u.telegram_linked ? undefined : 'muted'}>{u.telegram_linked ? 'привязан' : 'не привязан'}</td>
               <td data-k="mark">{u.role === 'admin' ? 'Администратор' : 'Пользователь'}{u.is_system && <span className="env-tag">из .env</span>}</td>

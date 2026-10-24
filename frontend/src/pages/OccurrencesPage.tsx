@@ -6,7 +6,6 @@ import { MarkButton, PaidMark } from '../components/Marks';
 import { ClipIcon } from '../components/icons';
 import { useDialogs } from '../components/dialogs/context';
 import { useAuth } from '../auth/context';
-import { useTeamScope } from '../auth/team';
 import { monthOf, monthRange, shiftMonth } from '../lib/dates';
 import { amountShort, CURRENCIES, date, monthTitle, plural, relative, shortDate } from '../lib/format';
 
@@ -35,7 +34,6 @@ function SortHeader({ label, k, sort, setSort, className }: { label: string; k: 
 
 export function OccurrencesPage() {
   const { today } = useAuth();
-  const { showTeams } = useTeamScope();
   const { open, openPeriod } = useDialogs();
   const base = useMemo<Filters>(() => ({ status: '', cur: [], overdue: false, from: monthRange(shiftMonth(monthOf(today), -1))[0], to: monthRange(shiftMonth(monthOf(today), 1))[1], pid: '' }), [today]);
   const [f, setF] = useState<Filters>(base);
@@ -123,7 +121,6 @@ export function OccurrencesPage() {
                     <td className="date" data-k="date">{byMonth ? shortDate(o.due_date) : date(o.due_date)}</td>
                     <td data-k="name">
                       <button type="button" className="link name" onClick={() => openPeriod(o.id)}>{o.recurring_payment.name}</button>
-                      {showTeams && <span className="team-tag">{o.team.name}</span>}
                       {o.recurring_payment.is_deleted && <span className="name-sub">платёж прекращён</span>}
                     </td>
                     <td className="sum" data-k="sum">{amountShort(o.amount, o.currency)}</td>

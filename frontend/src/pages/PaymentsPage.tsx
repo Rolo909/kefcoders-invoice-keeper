@@ -3,7 +3,6 @@ import { ActionIcon, Button, Checkbox, Menu, TextInput } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { usePayments, useSummary } from '../api/hooks';
 import { useAuth } from '../auth/context';
-import { useTeamScope } from '../auth/team';
 import { StatusText } from '../components/Marks';
 import { useDialogs } from '../components/dialogs/context';
 import { amountShort, date, PERIOD_LABEL, PERIOD_SHORT, plural, shortDate } from '../lib/format';
@@ -11,7 +10,6 @@ import { monthOf, monthRange } from '../lib/dates';
 
 export function PaymentsPage() {
   const { isAdmin, today } = useAuth();
-  const { showTeams } = useTeamScope();
   const { open } = useDialogs();
   const [q, setQ] = useState('');
   const [showStopped, setShowStopped] = useState(false);
@@ -66,7 +64,6 @@ export function PaymentsPage() {
                 <tr key={p.id} className={p.deleted_at ? 'stopped' : undefined}>
                   <td data-k="name" style={{ maxWidth: 440 }}>
                     <Link className="name" to={`/recurring-payments/${p.id}`}>{p.name}</Link>
-                    {!p.team ? <span className="team-tag" title="Каждая команда оплачивает свой период">общий</span> : showTeams && <span className="team-tag">{p.team.name}</span>}
                     {p.description && <span className="name-sub">{p.description}</span>}
                   </td>
                   <td className="sum" data-k="sum">{amountShort(p.amount, p.currency)}<span className="per" title={PERIOD_LABEL[p.period]}>{PERIOD_SHORT[p.period]}</span></td>

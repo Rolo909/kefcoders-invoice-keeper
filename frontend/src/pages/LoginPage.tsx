@@ -9,7 +9,7 @@ import { Logo } from '../components/Logo';
 
 const SECTION: Record<string, string> = {
   '/occurrences': 'Периоды', '/recurring-payments': 'Регулярные платежи', '/calendar': 'Календарь', '/summary': 'Итоги',
-  '/teams': 'Команды', '/users': 'Пользователи', '/audit': 'Журнал', '/settings': 'Профиль',
+  '/users': 'Пользователи', '/audit': 'Журнал', '/settings': 'Профиль',
 };
 
 export function LoginPage() {

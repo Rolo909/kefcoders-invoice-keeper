@@ -3,7 +3,6 @@ import { Button } from '@mantine/core';
 import { useCalendar, useSummary } from '../api/hooks';
 import type { CalendarDay, Currency } from '../api/types';
 import { useAuth } from '../auth/context';
-import { useTeamScope } from '../auth/team';
 import { MarkButton } from '../components/Marks';
 import { useDialogs } from '../components/dialogs/context';
 import { addDays, lastDayOfMonth, mondayIndex, monthOf, monthRange, shiftMonth } from '../lib/dates';
@@ -22,7 +21,6 @@ function daySums(d: CalendarDay | undefined) {
 
 export function CalendarPage() {
   const { today } = useAuth();
-  const { showTeams } = useTeamScope();
   const { openPeriod } = useDialogs();
   const [ym, setYm] = useState(monthOf(today));
   const [sel, setSel] = useState(today);
@@ -56,8 +54,8 @@ export function CalendarPage() {
     const count = (day?.occurrences.length ?? 0) + (day?.planned.length ?? 0);
     if (!count) return `${longDate(d)}, платежей нет`;
     const parts = [
-      ...(day?.occurrences ?? []).map((o) => `${o.recurring_payment.name}${showTeams ? `, ${o.team.name}` : ''}, ${money(o.amount, o.currency)}, ${STATE_LABEL[o.state].toLowerCase()}`),
-      ...(day?.planned ?? []).map((p) => `${p.name}${showTeams ? `, ${p.team.name}` : ''}, ${money(p.amount, p.currency)}, по плану`),
+      ...(day?.occurrences ?? []).map((o) => `${o.recurring_payment.name}, ${money(o.amount, o.currency)}, ${STATE_LABEL[o.state].toLowerCase()}`),
+      ...(day?.planned ?? []).map((p) => `${p.name}, ${money(p.amount, p.currency)}, по плану`),
     ];
     return `${longDate(d)}: ${parts.join('; ')}`;
   };
@@ -108,7 +106,7 @@ export function CalendarPage() {
                   <span className="n">{Number(d.slice(8))}</span>
                   <span className="marks" aria-hidden="true">
                     {item?.occurrences.map((o) => <i key={o.id} className={`mk ${o.state}`} />)}
-                    {item?.planned.map((p) => <i key={p.recurring_payment_id + p.team.id + p.due_date} className="mk planned" />)}
+                    {item?.planned.map((p) => <i key={p.recurring_payment_id + p.due_date} className="mk planned" />)}
                   </span>
                   {sums.map((s) => <span className="s" key={s.c} aria-hidden="true">{num(s.v).replace(',00', '')} {CURRENCY_SIGN[s.c]}</span>)}
                 </button>
@@ -133,10 +131,7 @@ export function CalendarPage() {
             {day?.occurrences.map((o) => (
               <div className="day-item" key={o.id}>
                 <div className="top">
-                  <span>
-                    <button type="button" className="link name" onClick={() => openPeriod(o.id)}>{o.recurring_payment.name}</button>
-                    {showTeams && <span className="name-sub">{o.team.name}</span>}
-                  </span>
+                  <button type="button" className="link name" onClick={() => openPeriod(o.id)}>{o.recurring_payment.name}</button>
                   <span className="mono nowrap">{money(o.amount, o.currency)}</span>
                 </div>
                 <div className="top" style={{ alignItems: 'center' }}>
@@ -146,11 +141,8 @@ export function CalendarPage() {
               </div>
             ))}
             {day?.planned.map((p) => (
-              <div className="day-item" key={p.recurring_payment_id + p.team.id}>
-                <div className="top">
-                  <span><span className="name">{p.name}</span>{showTeams && <span className="name-sub">{p.team.name}</span>}</span>
-                  <span className="mono nowrap">{money(p.amount, p.currency)}</span>
-                </div>
+              <div className="day-item" key={p.recurring_payment_id}>
+                <div className="top"><span className="name">{p.name}</span><span className="mono nowrap">{money(p.amount, p.currency)}</span></div>
                 <span className="small muted">По плану — период появится ближе к сроку</span>
               </div>
             ))}

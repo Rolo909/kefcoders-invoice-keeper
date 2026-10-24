@@ -14,22 +14,10 @@ export interface UserBrief {
   full_name: string | null;
 }
 
-export interface TeamBrief {
-  id: string;
-  name: string;
-}
-
-export interface Team extends TeamBrief {
-  telegram_chat_id: string | null;
-  members_count: number;
-  created_at: string;
-}
-
 export interface User extends UserBrief {
   email: string | null;
   role: Role;
   is_system: boolean;
-  team: TeamBrief | null;
   telegram_linked: boolean;
   notify_email: boolean;
   created_at: string;
@@ -59,7 +47,6 @@ export interface Occurrence {
   id: string;
   recurring_payment_id: string;
   recurring_payment: PaymentBrief;
-  team: TeamBrief;
   seq: number;
   due_date: ISODate;
   amount: string;
@@ -93,7 +80,6 @@ export interface NotificationLog {
   occurrence_id: string;
   payment_name: string;
   due_date: ISODate;
-  team: TeamBrief | null;
   channel: Channel;
   kind: NotificationKind;
   status: 'pending' | 'sent' | 'failed';
@@ -117,7 +103,6 @@ export interface RecurringPayment {
   period: Period;
   first_due_date: ISODate;
   end_date: ISODate | null;
-  team: TeamBrief | null;
   is_active: boolean;
   deleted_at: string | null;
   created_by: UserBrief;
@@ -158,7 +143,6 @@ export interface Summary {
 
 export interface PlannedItem {
   recurring_payment_id: string;
-  team: TeamBrief;
   name: string;
   due_date: ISODate;
   amount: string;
@@ -177,7 +161,6 @@ export interface CalendarMonth {
 }
 
 export interface Budget {
-  team_id: string;
   currency: Currency;
   period_type: 'month' | 'year';
   year: number;
@@ -200,7 +183,6 @@ export interface Attachment {
 export interface InboxItem {
   id: string;
   occurrence_id: string;
-  team: TeamBrief;
   kind: NotificationKind;
   created_at: string;
   read: boolean;
@@ -230,7 +212,6 @@ export interface OccurrenceQuery {
   date_from?: ISODate;
   date_to?: ISODate;
   recurring_payment_id?: string;
-  team_id?: string;
   sort?: 'due_date' | '-due_date' | 'amount' | '-amount' | 'days_overdue' | '-days_overdue';
   limit?: number;
   offset?: number;
@@ -244,7 +225,6 @@ export interface NewPayment {
   period: Period;
   next_due_date: ISODate;
   end_date?: ISODate | null;
-  team_id: string | null;
 }
 
 export interface UserInput {
@@ -253,10 +233,4 @@ export interface UserInput {
   email?: string | null;
   password?: string;
   notify_email?: boolean;
-  team_id?: string;
-}
-
-export interface TeamInput {
-  name: string;
-  telegram_chat_id: string | null;
 }

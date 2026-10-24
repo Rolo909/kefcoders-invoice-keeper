@@ -3,7 +3,6 @@ import { Button } from '@mantine/core';
 import { Link, useParams } from 'react-router-dom';
 import { usePayment } from '../api/hooks';
 import { useAuth } from '../auth/context';
-import { useTeamScope } from '../auth/team';
 import { MarkCell } from '../components/Marks';
 import { useDialogs } from '../components/dialogs/context';
 import { amountShort, date, dateTime, PERIOD_LABEL, plural } from '../lib/format';
@@ -11,7 +10,6 @@ import { amountShort, date, dateTime, PERIOD_LABEL, plural } from '../lib/format
 export function PaymentPage() {
   const { id = '' } = useParams();
   const { isAdmin } = useAuth();
-  const { showTeams, current } = useTeamScope();
   const { open, openPeriod } = useDialogs();
   const q = usePayment(id);
 
@@ -27,8 +25,6 @@ export function PaymentPage() {
   const paidSum = paid.reduce((s, o) => s + Number(o.amount), 0);
   const overdue = p.occurrences.filter((o) => o.state === 'overdue').length;
   const day31 = p.period === 'monthly' && Number(p.first_due_date.slice(8)) > 28;
-  // Общий платёж у всех команд сразу: у каждой команды свои строки периодов.
-  const byTeam = !p.team && showTeams;
 
   return (
     <>
@@ -44,11 +40,6 @@ export function PaymentPage() {
       <div className="split" style={{ gridTemplateColumns: 'minmax(0, 340px) minmax(0, 1fr)' }}>
         <section className="params" aria-label="Параметры">
           <dl className="kv">
-            <dt>Для кого</dt>
-            <dd>
-              {p.team ? p.team.name : 'Все команды'}
-              <span className="name-sub">{p.team ? 'Платёж видит и оплачивает только эта команда' : `Общий платёж: каждая команда оплачивает свой период${current ? `. Здесь — периоды команды «${current.name}»` : ''}`}</span>
-            </dd>
             <dt>Сумма</dt><dd>{amountShort(p.amount, p.currency)}</dd>
             <dt>Периодичность</dt><dd>{PERIOD_LABEL[p.period]}</dd>
             <dt>Первый срок</dt><dd><span className="mono">{date(p.first_due_date)}</span><span className="name-sub">{day31 ? `Все сроки — ${Number(p.first_due_date.slice(8))}-го, в коротких месяцах — последний день` : 'От этой даты считаются все сроки'}</span></dd>
@@ -62,12 +53,11 @@ export function PaymentPage() {
         <section aria-labelledby="hist-t">
           <h2 id="hist-t" className="section-title" style={{ marginTop: 0 }}>Все периоды</h2>
           <table className="ledger stack attn">
-            <thead><tr><th scope="col">Срок</th>{byTeam && <th scope="col">Команда</th>}<th scope="col" className="r ruled" style={{ paddingRight: 24 }}>Сумма</th><th scope="col" className="mark">Отметка</th><th scope="col">Вложения</th></tr></thead>
+            <thead><tr><th scope="col">Срок</th><th scope="col" className="r ruled" style={{ paddingRight: 24 }}>Сумма</th><th scope="col" className="mark">Отметка</th><th scope="col">Вложения</th></tr></thead>
             <tbody>
               {p.occurrences.map((o) => (
                 <tr key={o.id} className={o.state}>
-                  <td className="date" data-k="date"><button type="button" className="link mono" onClick={() => openPeriod(o.id)} aria-label={`Период ${date(o.due_date)}${byTeam ? `, команда ${o.team.name}` : ''}`}>{date(o.due_date)}</button></td>
-                  {byTeam && <td data-k="name">{o.team.name}</td>}
+                  <td className="date" data-k="date"><button type="button" className="link mono" onClick={() => openPeriod(o.id)} aria-label={`Период ${date(o.due_date)}`}>{date(o.due_date)}</button></td>
                   <td className="sum ruled" data-k="sum">{amountShort(o.amount, o.currency)}</td>
                   <td className="mark" data-k="mark"><MarkCell occ={o} /></td>
                   <td data-k="hide-sm" className="muted">{o.attachments_count ? `${o.attachments_count} ${plural(o.attachments_count, 'файл', 'файла', 'файлов')}` : '—'}</td>
