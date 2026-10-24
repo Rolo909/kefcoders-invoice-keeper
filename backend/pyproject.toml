@@ -52,6 +52,11 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # кириллица в строках 
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106"]
+"tests/conftest.py" = ["E402"]  # окружение задаётся до импорта приложения
+"alembic/versions/**" = ["E501"]  # автогенерированные миграции
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]  # иначе папка alembic/ рядом принимается за локальный пакет
 
 [tool.mypy]
 python_version = "3.12"

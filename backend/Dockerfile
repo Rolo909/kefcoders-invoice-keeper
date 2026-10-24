@@ -11,7 +11,8 @@ COPY pyproject.toml ./
 COPY app ./app
 RUN pip install .
 
-COPY entrypoint.sh ./
+COPY alembic.ini entrypoint.sh ./
+COPY alembic ./alembic
 RUN useradd --create-home --uid 1000 app \
     && mkdir -p /data/uploads \
     && chown app:app /data/uploads \

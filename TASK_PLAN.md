@@ -233,7 +233,7 @@ erDiagram
 | поле | тип | примечание |
 |---|---|---|
 | id | uuid PK | |
-| login | varchar(64) unique, citext | |
+| login | varchar(64), уникальный индекс по `lower(login)` | без учёта регистра; расширение citext не нужно |
 | password_hash | text | argon2 |
 | full_name | varchar(128) null | |
 | email | varchar(255) null | для email-оповещений |
