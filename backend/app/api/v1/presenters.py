@@ -3,6 +3,7 @@
 from datetime import date
 
 from app.domain.status import days_overdue, is_overdue, occurrence_state
+from app.models import AuditLog, Notification, User
 from app.schemas.payment import (
     AuditLogOut,
     NotificationLogOut,
@@ -45,36 +46,38 @@ def occurrence_detail_out(detail: OccurrenceDetail, *, today: date, remind_days_
     o, p = detail.view.occurrence, detail.view.payment
     return OccurrenceDetailOut(
         **base.model_dump(),
-        history=[
-            AuditLogOut(
-                id=log.id,
-                at=log.at,
-                actor=UserBrief.model_validate(actor) if actor else None,
-                actor_login=log.actor_login,
-                action=log.action,
-                entity_type=log.entity_type,
-                entity_id=log.entity_id,
-                details=log.details,
-                ip=log.ip,
-            )
-            for log, actor in detail.history
-        ],
-        reminders=[
-            NotificationLogOut(
-                id=n.id,
-                occurrence_id=n.occurrence_id,
-                payment_name=p.name,
-                due_date=o.due_date,
-                channel=n.channel,
-                kind=n.kind,
-                status=n.status,
-                attempts=n.attempts,
-                last_error=n.last_error,
-                sent_at=n.sent_at,
-                created_at=n.created_at,
-            )
-            for n in detail.reminders
-        ],
+        history=[audit_log_out(log, actor) for log, actor in detail.history],
+        reminders=[notification_out(n, payment_name=p.name, due_date=o.due_date) for n in detail.reminders],
+    )
+
+
+def audit_log_out(log: AuditLog, actor: User | None) -> AuditLogOut:
+    return AuditLogOut(
+        id=log.id,
+        at=log.at,
+        actor=UserBrief.model_validate(actor) if actor else None,
+        actor_login=log.actor_login,
+        action=log.action,
+        entity_type=log.entity_type,
+        entity_id=log.entity_id,
+        details=log.details,
+        ip=log.ip,
+    )
+
+
+def notification_out(n: Notification, *, payment_name: str, due_date: date) -> NotificationLogOut:
+    return NotificationLogOut(
+        id=n.id,
+        occurrence_id=n.occurrence_id,
+        payment_name=payment_name,
+        due_date=due_date,
+        channel=n.channel,
+        kind=n.kind,
+        status=n.status,
+        attempts=n.attempts,
+        last_error=n.last_error,
+        sent_at=n.sent_at,
+        created_at=n.created_at,
     )
 
 

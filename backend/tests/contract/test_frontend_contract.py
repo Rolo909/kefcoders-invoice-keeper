@@ -198,6 +198,28 @@ async def test_budgets(api: AsyncClient, tokens: dict[str, str]) -> None:
         assert_matches("Budget", budget)
 
 
+async def test_attachments_and_logs(api: AsyncClient, tokens: dict[str, str], paid_period: dict[str, Any]) -> None:
+    url = f"/api/v1/payment-occurrences/{paid_period['id']}/attachments"
+    file = await api.post(
+        url, files={"file": ("чек.pdf", b"%PDF-1.4 test", "application/pdf")}, headers=bearer(tokens["user"])
+    )
+    link = await api.post(url, json={"url": "https://bank.ru/receipt/42"}, headers=bearer(tokens["user"]))
+    listed = await get(api, tokens["user"], f"/payment-occurrences/{paid_period['id']}/attachments")
+    audit = await get(api, tokens["admin"], "/audit-logs", limit=50, offset=0)
+    notifications = await get(api, tokens["admin"], "/notifications", limit=50, offset=0)
+
+    for attachment in [file.json(), link.json(), *listed]:
+        assert_matches("Attachment", attachment)
+        assert_matches("UserBrief", attachment["uploaded_by"])
+    assert_matches("Page", audit)
+    assert_matches("Page", notifications)
+    for entry in audit["items"]:
+        assert_matches("AuditLog", entry)
+    assert notifications["items"]
+    for reminder in notifications["items"]:
+        assert_matches("NotificationLog", reminder)
+
+
 # ---------- ошибки: панель различает их по code и показывает detail ----------
 
 

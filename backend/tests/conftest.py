@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 # Окружение задаётся до импорта приложения: Settings читаются при импорте app.db.
 # Тесты всегда работают с отдельной тестовой БД — рабочая база не затрагивается.
@@ -7,6 +8,7 @@ TEST_DATABASE_URL = os.environ.get(
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
+os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="ik-uploads-")  # чеки тестов — во временной папке
 
 import asyncio
 from collections.abc import AsyncIterator, Iterator

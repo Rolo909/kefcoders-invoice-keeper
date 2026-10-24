@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
 from app.api.v1 import (
+    attachments,
     auth,
     budgets,
     calendar,
     health,
+    logs,
     occurrences,
     payments_summary,
     recurring_payments,
@@ -28,6 +30,8 @@ protected_router.include_router(occurrences.router)
 protected_router.include_router(payments_summary.router)
 protected_router.include_router(calendar.router)
 protected_router.include_router(budgets.router)
+protected_router.include_router(attachments.router)
+protected_router.include_router(logs.router)
 protected_router.include_router(users.router)
 protected_router.include_router(telegram.router)
 

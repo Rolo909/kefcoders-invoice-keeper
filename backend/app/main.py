@@ -31,6 +31,8 @@ OPENAPI_TAGS = [
     {"name": "payments", "description": "Итоги по валютам — отдельно RUB, USD и EUR, без конвертации"},
     {"name": "budgets", "description": "Бюджеты по валютам на месяц и год (задаёт администратор)"},
     {"name": "users", "description": "Обычные пользователи (только для администратора)"},
+    {"name": "attachments", "description": "Чек (файл) или ссылка к конкретной оплате"},
+    {"name": "logs", "description": "Журнал входов и действий, журнал напоминаний (администратор)"},
     {"name": "telegram", "description": "Привязка Telegram для кнопки «Оплачено» в напоминаниях"},
     {"name": "health", "description": "Проверка работоспособности"},
 ]

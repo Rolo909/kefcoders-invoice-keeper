@@ -148,6 +148,9 @@ React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план
 Дополнительно: `GET /recurring-payments/{id}` (платёж со всеми периодами), `PATCH /auth/me` (своя почта),
 `POST /telegram/link-code` (код привязки Telegram), `GET /payments/calendar?month=ГГГГ-ММ` (календарь оплат:
 сроки по дням, включая плановые), `GET` / `PUT /budgets` (бюджеты на месяц и год; менять может администратор),
+`GET` / `POST /payment-occurrences/{id}/attachments`, `GET /attachments/{id}/download`, `DELETE /attachments/{id}`
+(чек — PDF, PNG, JPG, WebP до 10 МБ — или ссылка к оплате; удалить может автор или администратор),
+`GET /audit-logs`, `GET /notifications` (журнал входов и действий, журнал напоминаний — для администратора),
 `GET /health`. Полная спецификация — [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ## Настройки (`.env`)
@@ -163,8 +166,9 @@ React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план
 | `ADMIN_LOGIN`, `ADMIN_PASSWORD` | `admin`, — | единственный способ задать администратора |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | — | база данных |
 | `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | `true`, —, — | напоминания в Telegram |
+| `UPLOAD_MAX_MB` | `10` | максимальный размер чека; файлы хранятся в Docker-томе `uploads` |
 
-Остальные переменные в `.env.example` относятся к дополнительным каналам и вложениям.
+Остальные переменные в `.env.example` относятся к дополнительным каналам уведомлений.
 
 ## Если что-то не работает
 

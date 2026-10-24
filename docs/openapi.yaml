@@ -634,6 +634,279 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payment-occurrences/{occurrence_id}/attachments:
+    get:
+      tags:
+      - attachments
+      summary: Чеки и ссылки, прикреплённые к оплате
+      operationId: list_attachments_api_v1_payment_occurrences__occurrence_id__attachments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: occurrence_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Occurrence Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttachmentOut'
+                title: Response List Attachments Api V1 Payment Occurrences  Occurrence Id  Attachments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - attachments
+      summary: Прикрепить к оплате чек (файл до UPLOAD_MAX_MB) или ссылку
+      operationId: add_attachment_api_v1_payment_occurrences__occurrence_id__attachments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: occurrence_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Occurrence Id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF, PNG, JPG, WebP
+          application/json:
+            schema:
+              type: object
+              required:
+              - url
+              properties:
+                url:
+                  type: string
+  /api/v1/attachments/{attachment_id}/download:
+    get:
+      tags:
+      - attachments
+      summary: Скачать файл чека
+      operationId: download_api_v1_attachments__attachment_id__download_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Attachment Id
+      responses:
+        '200':
+          description: Successful Response
+        '404':
+          description: Вложение не найдено или это ссылка
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/attachments/{attachment_id}:
+    delete:
+      tags:
+      - attachments
+      summary: Удалить вложение (автор или администратор)
+      operationId: delete_attachment_api_v1_attachments__attachment_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: attachment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Attachment Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/audit-logs:
+    get:
+      tags:
+      - logs
+      summary: Журнал входов и действий (администратор)
+      operationId: audit_logs_api_v1_audit_logs_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          description: Например auth — все входы и выходы
+          title: Action
+        description: Например auth — все входы и выходы
+      - name: actor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Actor Id
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          description: Размер страницы
+          default: 50
+          title: Limit
+        description: Размер страницы
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Сколько записей пропустить
+          default: 0
+          title: Offset
+        description: Сколько записей пропустить
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page_AuditLogOut_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/notifications:
+    get:
+      tags:
+      - logs
+      summary: Журнал напоминаний по каналам (администратор)
+      operationId: notifications_api_v1_notifications_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: channel
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/NotificationChannel'
+          - type: 'null'
+          title: Channel
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/NotificationStatus'
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          description: Размер страницы
+          default: 50
+          title: Limit
+        description: Размер страницы
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Сколько записей пропустить
+          default: 0
+          title: Offset
+        description: Сколько записей пропустить
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page_NotificationLogOut_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/users:
     get:
       tags:
@@ -792,6 +1065,60 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
+    AttachmentKind:
+      type: string
+      enum:
+      - file
+      - link
+      title: AttachmentKind
+    AttachmentOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        occurrence_id:
+          type: string
+          format: uuid
+          title: Occurrence Id
+        kind:
+          $ref: '#/components/schemas/AttachmentKind'
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+        original_name:
+          type: string
+          title: Original Name
+        content_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content Type
+        size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Size
+        uploaded_by:
+          $ref: '#/components/schemas/UserBrief'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - occurrence_id
+      - kind
+      - url
+      - original_name
+      - content_type
+      - size
+      - uploaded_by
+      - created_at
+      title: AttachmentOut
     AuditLogOut:
       properties:
         id:
@@ -1423,6 +1750,52 @@ components:
       type: object
       title: OccurrenceUpdate
       description: Срок, сумма и валюта периода фиксированы — менять можно только отметку и фактическую дату.
+    Page_AuditLogOut_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AuditLogOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: Page[AuditLogOut]
+    Page_NotificationLogOut_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/NotificationLogOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: Page[NotificationLogOut]
     Page_OccurrenceOut_:
       properties:
         items:
@@ -1956,6 +2329,10 @@ tags:
   description: Бюджеты по валютам на месяц и год (задаёт администратор)
 - name: users
   description: Обычные пользователи (только для администратора)
+- name: attachments
+  description: Чек (файл) или ссылка к конкретной оплате
+- name: logs
+  description: Журнал входов и действий, журнал напоминаний (администратор)
 - name: telegram
   description: Привязка Telegram для кнопки «Оплачено» в напоминаниях
 - name: health
