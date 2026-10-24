@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
+from app.bot.flood import FloodGuard
 from app.bot.handlers import build_router
 from app.db import SessionFactory
 
@@ -19,6 +20,9 @@ COMMANDS = [
 
 def build_dispatcher(session_factory: SessionFactory, timezone: ZoneInfo) -> Dispatcher:
     dispatcher = Dispatcher(session_factory=session_factory, timezone=timezone)
+    guard = FloodGuard()
+    dispatcher.message.outer_middleware(guard)
+    dispatcher.callback_query.outer_middleware(guard)
     dispatcher.include_router(build_router())
     return dispatcher
 
