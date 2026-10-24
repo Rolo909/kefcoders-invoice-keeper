@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { num } from '../lib/format';
+import { numShort } from '../lib/format';
 
 export function CountUp({ value }: { value: number }) {
   const [shown, setShown] = useState(value);
@@ -31,5 +31,5 @@ export function CountUp({ value }: { value: number }) {
     };
   }, [value]);
 
-  return <span className={changed ? 'num-changed' : undefined}>{num(shown)}</span>;
+  return <span className={changed ? 'num-changed' : undefined}>{numShort(Number.isInteger(value) ? Math.round(shown) : shown)}</span>;
 }

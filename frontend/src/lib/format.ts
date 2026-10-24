@@ -9,6 +9,7 @@ export const CURRENCIES: Currency[] = ['RUB', 'USD', 'EUR'];
 export const CURRENCY_SIGN: Record<Currency, string> = { RUB: '₽', USD: '$', EUR: '€' };
 export const CURRENCY_NAME: Record<Currency, string> = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' };
 export const PERIOD_LABEL: Record<Period, string> = { weekly: 'Еженедельно', monthly: 'Ежемесячно', quarterly: 'Раз в квартал', yearly: 'Раз в год' };
+export const PERIOD_SHORT: Record<Period, string> = { weekly: '/нед', monthly: '/мес', quarterly: '/квартал', yearly: '/год' };
 export const STATE_LABEL: Record<OccurrenceState, string> = {
   paid: 'Оплачено', paid_late: 'Оплачено с опозданием', due_soon: 'Скоро', overdue: 'Просрочено', upcoming: 'Ожидает',
 };
@@ -32,7 +33,8 @@ export const money = (v: string | number, c: Currency) =>
 export const num = (v: string | number) =>
   new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(toNumber(v));
 
-export const amountWithSign = (v: string | number, c: Currency) => `${num(v)} ${CURRENCY_SIGN[c]}`;
+export const numShort = (v: string | number) => num(v).replace(/,00$/, '');
+export const amountShort = (v: string | number, c: Currency) => `${numShort(v)}\u00a0${CURRENCY_SIGN[c]}`;
 
 export const date = (s?: string | null) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
 export const shortDate = (s?: string | null) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}` : '');
