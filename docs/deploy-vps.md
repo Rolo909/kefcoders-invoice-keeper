@@ -145,8 +145,8 @@ cd /opt/invoice-keeper
 ```bash
 cp .env.example .env
 chmod 600 .env
-openssl rand -base64 18   # пароль администратора
-openssl rand -base64 18   # пароль базы данных
+openssl rand -hex 16   # пароль администратора
+openssl rand -hex 16   # пароль базы данных (только буквы и цифры — он входит в адрес подключения)
 nano .env
 ```
 
