@@ -91,7 +91,7 @@ function Notifications() {
             <tr key={n.id}>
               <td className="date" data-k="date" style={{ width: 120 }}>{dateTime(n.created_at)}</td>
               <td data-k="sum">{CHANNEL[n.channel]}</td>
-              <td data-k="name"><Link to={`/occurrences/${n.occurrence_id}`}>{n.payment_name}</Link><span className="name-sub mono">{date(n.due_date)}</span></td>
+              <td data-k="name"><Link to={`/occurrences/${n.occurrence_id}`}>{n.payment_name}</Link><span className="name-sub mono">{date(n.due_date)}{n.team ? ` · ${n.team.name}` : ''}</span></td>
               <td data-k="hide-sm">{n.kind === 'overdue' ? 'О просрочке' : 'За 3 дня'}</td>
               <td data-k="mark">
                 <span className={`st ${n.status === 'sent' ? 'paid' : n.status === 'failed' ? 'overdue' : 'upcoming'}`}>{n.status === 'sent' ? 'Доставлено' : n.status === 'failed' ? 'Не доставлено' : 'Отправляется'}</span>

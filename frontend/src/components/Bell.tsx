@@ -16,7 +16,7 @@ function line(i: InboxItem, today: string) {
 }
 
 export function Bell() {
-  const { user, today } = useAuth();
+  const { user, today, isAdmin } = useAuth();
   const inbox = useInbox(!!user);
   const read = useReadInbox();
   const [opened, setOpened] = useState(false);
@@ -52,7 +52,7 @@ export function Bell() {
                   <span>
                     <span className="t">{i.payment_name}</span>
                     <span className={`s${l.red ? ' red' : ''}`}>{l.text}</span>
-                    <span className="s">В панели · {dateTime(i.created_at)}{i.read ? '' : ' · не прочитано'}</span>
+                    <span className="s">{isAdmin ? `${i.team.name} · ` : ''}В панели · {dateTime(i.created_at)}{i.read ? '' : ' · не прочитано'}</span>
                   </span>
                 </Link>
               </li>

@@ -4,9 +4,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useAddAttachment, useCreatePayment, useDeleteAttachment, useDeleteUser, usePayment, useSaveUser, useStopPayment } from '../../api/hooks';
-import type { Attachment, Occurrence, RecurringPayment, User } from '../../api/types';
+import {
+  useAddAttachment, useCreatePayment, useDeleteAttachment, useDeleteTeam, useDeleteUser, usePayment, useSaveTeam, useSaveUser, useStopPayment,
+} from '../../api/hooks';
+import type { Attachment, Occurrence, RecurringPayment, Team, User } from '../../api/types';
 import { useAuth } from '../../auth/context';
+import { useTeamScope } from '../../auth/team';
 import { diffDays } from '../../lib/dates';
 import { date, days, money, plural, shortDate } from '../../lib/format';
 import { toast, usePaymentActions } from './actions';
@@ -198,28 +201,34 @@ const paymentSchema = z
     period: z.enum(['monthly', 'weekly', 'quarterly', 'yearly']),
     next_due_date: z.string().min(1, 'Укажите дату ближайшей оплаты.'),
     end_date: z.string().optional(),
+    // 'all' — общий платёж для всех команд, иначе id команды.
+    team: z.string(),
   })
   .refine((v) => !v.end_date || v.end_date >= v.next_due_date, { path: ['end_date'], message: 'Дата окончания должна быть не раньше даты ближайшей оплаты.' });
 type PaymentForm = z.infer<typeof paymentSchema>;
 
 function NewPaymentBody({ onClose }: { onClose: () => void }) {
   const { today } = useAuth();
+  const { teamId, teams } = useTeamScope();
   const create = useCreatePayment();
   const [error, setError] = useState('');
-  const { register, handleSubmit, formState: { errors } } = useForm<PaymentForm>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<PaymentForm>({
     resolver: zodResolver(paymentSchema),
-    defaultValues: { name: '', description: '', amount: '', currency: 'RUB', period: 'monthly', next_due_date: '', end_date: '' },
+    // Как в API: без выбранной команды платёж общий.
+    defaultValues: { name: '', description: '', amount: '', currency: 'RUB', period: 'monthly', next_due_date: '', end_date: '', team: teamId ?? 'all' },
   });
+  const common = watch('team') === 'all';
 
   const submit = handleSubmit(async (v) => {
     setError('');
     try {
       const p = await create.mutateAsync({
         name: v.name.trim(), description: v.description?.trim() || null, amount: Number(v.amount.replace(/\s/g, '').replace(',', '.')).toFixed(2),
-        currency: v.currency, period: v.period, next_due_date: v.next_due_date, end_date: v.end_date || null,
+        currency: v.currency, period: v.period, next_due_date: v.next_due_date, end_date: v.end_date || null, team_id: v.team === 'all' ? null : v.team,
       });
       const soon = diffDays(today, v.next_due_date) <= 3 && v.next_due_date >= today;
-      toast(`Платёж «${p.name}» создан. Первый срок — ${date(v.next_due_date)}.${soon ? ' До срока меньше 3 дней — напоминание уже ушло в Telegram.' : ''}`);
+      const whom = p.team ? `для команды «${p.team.name}»` : 'для всех команд';
+      toast(`Платёж «${p.name}» создан ${whom}. Первый срок — ${date(v.next_due_date)}.${soon ? ' До срока меньше 3 дней — напоминание уже ушло в Telegram.' : ''}`);
       onClose();
     } catch (e) {
       setError(errText(e));
@@ -230,6 +239,15 @@ function NewPaymentBody({ onClose }: { onClose: () => void }) {
     <form onSubmit={submit} noValidate>
       <div className="form-grid">
         <TextInput className="wide" label="Название" placeholder="Аренда офиса" maxLength={200} autoComplete="off" error={errors.name?.message} {...register('name')} data-autofocus />
+        <NativeSelect
+          className="wide"
+          label="Для кого"
+          data={[{ value: 'all', label: 'Все команды — общий платёж' }, ...teams.map((t) => ({ value: t.id, label: t.name }))]}
+          description={common
+            ? 'Каждая команда получит свои периоды и сама отметит оплату. Новые команды получат платёж с ближайшего срока.'
+            : 'Платёж увидит и оплатит только эта команда.'}
+          {...register('team')}
+        />
         <Textarea className="wide" label="Описание — необязательно" placeholder="Договор № 14/2025, оплата до 26-го числа" autosize minRows={2} {...register('description')} />
         <TextInput label="Сумма" placeholder="50 000,00" inputMode="decimal" autoComplete="off" classNames={{ input: 'mono' }} error={errors.amount?.message} {...register('amount')} />
         <NativeSelect label="Валюта" data={[{ value: 'RUB', label: 'RUB — рубли' }, { value: 'USD', label: 'USD — доллары' }, { value: 'EUR', label: 'EUR — евро' }]} {...register('currency')} />
@@ -294,6 +312,7 @@ function StopPaymentBody({ payment, onClose }: { payment: RecurringPayment; onCl
 
 function UserFormBody({ user, onClose }: { user?: User; onClose: () => void }) {
   const save = useSaveUser();
+  const { teamId, teams } = useTeamScope();
   const [error, setError] = useState('');
   const schema = z
     .object({
@@ -302,12 +321,16 @@ function UserFormBody({ user, onClose }: { user?: User; onClose: () => void }) {
       email: z.string().trim().refine((v) => !v || /^\S+@\S+\.\S+$/.test(v), 'Введите адрес целиком, например name@kefcoders.ru.'),
       password: z.string().refine((v) => (user ? !v || v.length >= 8 : v.length >= 8), user ? 'Новый пароль — не короче 8 символов. Оставьте поле пустым, чтобы не менять.' : 'Пароль — не короче 8 символов.'),
       notify_email: z.boolean(),
+      team_id: z.string().min(1, 'Выберите команду: пользователь видит её платежи и общие.'),
     })
     .refine((v) => !v.notify_email || !!v.email, { path: ['email'], message: 'Укажите почту, чтобы присылать на неё напоминания.' });
   type Form = z.infer<typeof schema>;
   const { register, handleSubmit, setError: setFieldError, formState: { errors } } = useForm<Form>({
     resolver: zodResolver(schema),
-    defaultValues: { login: user?.login ?? '', full_name: user?.full_name ?? '', email: user?.email ?? '', password: '', notify_email: user?.notify_email ?? false },
+    defaultValues: {
+      login: user?.login ?? '', full_name: user?.full_name ?? '', email: user?.email ?? '', password: '', notify_email: user?.notify_email ?? false,
+      team_id: user?.team?.id ?? teamId ?? (teams.length === 1 ? teams[0].id : ''),
+    },
   });
 
   const submit = handleSubmit(async (v) => {
@@ -315,7 +338,7 @@ function UserFormBody({ user, onClose }: { user?: User; onClose: () => void }) {
     try {
       await save.mutateAsync({
         id: user?.id, login: v.login.trim(), full_name: v.full_name?.trim() || null, email: v.email.trim() || null,
-        notify_email: v.notify_email, ...(v.password ? { password: v.password } : {}),
+        notify_email: v.notify_email, team_id: v.team_id, ...(v.password ? { password: v.password } : {}),
       });
       toast(user ? `Изменения пользователя ${v.login} сохранены.` : `Пользователь ${v.login} создан. Передайте ему логин и пароль.`);
       onClose();
@@ -330,6 +353,14 @@ function UserFormBody({ user, onClose }: { user?: User; onClose: () => void }) {
       <div className="form-grid">
         <TextInput label="Логин" placeholder="ivan.petrov" autoComplete="off" autoCapitalize="off" spellCheck={false} classNames={{ input: 'mono' }} error={errors.login?.message} {...register('login')} data-autofocus />
         <TextInput label="Имя и фамилия — необязательно" placeholder="Иван Петров" autoComplete="off" {...register('full_name')} />
+        <NativeSelect
+          className="wide"
+          label="Команда"
+          data={[{ value: '', label: 'Выберите команду', disabled: true }, ...teams.map((t) => ({ value: t.id, label: t.name }))]}
+          description={user ? 'При переходе в другую команду прошлые отметки об оплате останутся в истории.' : 'Пользователь увидит платежи своей команды и общие.'}
+          error={errors.team_id?.message}
+          {...register('team_id')}
+        />
         <TextInput type="email" inputMode="email" label="Почта — необязательно" placeholder="ivan@kefcoders.ru" autoComplete="off" error={errors.email?.message} {...register('email')} />
         <PasswordInput
           label={user ? 'Новый пароль — необязательно' : 'Пароль'}
@@ -381,6 +412,90 @@ function DeleteUserBody({ user, onClose }: { user: User; onClose: () => void }) 
   );
 }
 
+function TeamFormBody({ team, onClose }: { team?: Team; onClose: () => void }) {
+  const save = useSaveTeam();
+  const [error, setError] = useState('');
+  const schema = z.object({
+    name: z.string().trim().min(1, 'Введите название команды.').max(100, 'Название — не длиннее 100 символов.'),
+    telegram_chat_id: z.string().trim().refine((v) => !v || /^(-?\d{5,20}|@[A-Za-z0-9_]{5,32})$/.test(v), 'ID чата — число, например -1001234567890, или @имя_канала.'),
+  });
+  type Form = z.infer<typeof schema>;
+  const { register, handleSubmit, setError: setFieldError, formState: { errors } } = useForm<Form>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: team?.name ?? '', telegram_chat_id: team?.telegram_chat_id ?? '' },
+  });
+
+  const submit = handleSubmit(async (v) => {
+    setError('');
+    try {
+      await save.mutateAsync({ id: team?.id, name: v.name.trim(), telegram_chat_id: v.telegram_chat_id.trim() || null });
+      toast(team ? `Команда «${v.name.trim()}» сохранена.` : `Команда «${v.name.trim()}» создана. Добавьте в неё пользователей.`);
+      onClose();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'team_name_taken') setFieldError('name', { message: e.detail });
+      else setError(errText(e));
+    }
+  });
+
+  return (
+    <form onSubmit={submit} noValidate>
+      <Stack gap="md">
+        <TextInput label="Название" placeholder="Студия дизайна" maxLength={100} autoComplete="off" error={errors.name?.message} {...register('name')} data-autofocus />
+        <TextInput
+          label="Чат Telegram — необязательно"
+          placeholder="-1001234567890"
+          autoComplete="off"
+          classNames={{ input: 'mono' }}
+          description="Сюда бот пишет напоминания команды. Пусто — общий чат из .env (TELEGRAM_CHAT_ID)."
+          error={errors.telegram_chat_id?.message}
+          {...register('telegram_chat_id')}
+        />
+        {!team && <p className="muted small">Новая команда сразу получит общие платежи — с ближайшего срока, без долгов за прошлое.</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <Group justify="flex-end">
+          <Button variant="subtle" onClick={onClose}>Отмена</Button>
+          <Button type="submit" variant="filled" loading={save.isPending}>{team ? 'Сохранить команду' : 'Создать команду'}</Button>
+        </Group>
+      </Stack>
+    </form>
+  );
+}
+
+function DeleteTeamBody({ team, onClose }: { team: Team; onClose: () => void }) {
+  const del = useDeleteTeam();
+  const { teamId, setTeamId } = useTeamScope();
+  const [error, setError] = useState('');
+  return (
+    <Stack gap="md">
+      {team.members_count > 0
+        ? <p>В команде {team.members_count} {plural(team.members_count, 'участник', 'участника', 'участников')}. Переведите их в другую команду или удалите — история оплат команды должна сохраниться.</p>
+        : <p>Команда пустая. Её неоплаченные периоды общих платежей удалятся.</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <Group justify="flex-end">
+        <Button variant="subtle" onClick={onClose} data-autofocus>Не удалять</Button>
+        <Button
+          variant="filled"
+          color="red"
+          loading={del.isPending}
+          disabled={team.members_count > 0}
+          onClick={async () => {
+            try {
+              await del.mutateAsync(team.id);
+              if (teamId === team.id) setTeamId(null);
+              toast(`Команда «${team.name}» удалена.`);
+              onClose();
+            } catch (e) {
+              setError(errText(e));
+            }
+          }}
+        >
+          Удалить команду
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
 function titleOf(d: DialogState) {
   switch (d.type) {
     case 'markPaid': return 'Отметить оплату';
@@ -392,6 +507,8 @@ function titleOf(d: DialogState) {
     case 'stopPayment': return `Прекратить «${d.payment.name}»?`;
     case 'userForm': return d.user ? `Изменить пользователя ${d.user.login}` : 'Новый пользователь';
     case 'deleteUser': return `Удалить пользователя ${d.user.login}?`;
+    case 'teamForm': return d.team ? `Изменить команду «${d.team.name}»` : 'Новая команда';
+    case 'deleteTeam': return `Удалить команду «${d.team.name}»?`;
   }
 }
 
@@ -422,6 +539,8 @@ export function Modals({ dialog, inCard, onClose }: { dialog: DialogState | null
       {d?.type === 'stopPayment' && <StopPaymentBody payment={d.payment} onClose={onClose} />}
       {d?.type === 'userForm' && <UserFormBody key={d.user?.id ?? 'new'} user={d.user} onClose={onClose} />}
       {d?.type === 'deleteUser' && <DeleteUserBody user={d.user} onClose={onClose} />}
+      {d?.type === 'teamForm' && <TeamFormBody key={d.team?.id ?? 'new'} team={d.team} onClose={onClose} />}
+      {d?.type === 'deleteTeam' && <DeleteTeamBody team={d.team} onClose={onClose} />}
     </Modal>
   );
 }

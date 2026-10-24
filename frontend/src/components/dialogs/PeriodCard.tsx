@@ -47,7 +47,7 @@ export function PeriodCard({ id, asPage = false }: { id: string; asPage?: boolea
   const { open } = useDialogs();
   const q = useOccurrence(id);
   const files = useAttachments(id);
-  const siblings = useOccurrences({ recurring_payment_id: q.data?.recurring_payment_id, sort: '-due_date', limit: 6 }, !!q.data);
+  const siblings = useOccurrences({ recurring_payment_id: q.data?.recurring_payment_id, team_id: q.data?.team.id, sort: '-due_date', limit: 6 }, !!q.data);
 
   if (q.isPending) return <div aria-busy="true"><span className="sk" style={{ width: '60%', height: 28 }} /><span className="sk" style={{ marginTop: 18, height: 48, width: '40%' }} /></div>;
   if (q.isError || !q.data) return <div className="empty"><h2>Период не найден</h2><p>Возможно, платёж прекратили и будущий период удалился.</p><Link to="/occurrences">Открыть все периоды</Link></div>;
@@ -68,6 +68,7 @@ export function PeriodCard({ id, asPage = false }: { id: string; asPage?: boolea
       <dl className="facts">
         <div><dt className="sr-only">Срок</dt><dd>Срок <b>{date(o.due_date)}</b></dd></div>
         <div><dt className="sr-only">Номер периода</dt><dd>Период <b>№ {o.seq + 1}</b></dd></div>
+        {isAdmin && <div><dt className="sr-only">Команда</dt><dd>Команда <b>{o.team.name}</b></dd></div>}
         {o.paid_by && <div><dt className="sr-only">Отметка</dt><dd>Отметка <b>{o.paid_by.full_name ?? o.paid_by.login}</b></dd></div>}
       </dl>
 
