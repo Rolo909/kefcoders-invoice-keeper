@@ -6,12 +6,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import SettingsDep, TodayDep
+from app.api.deps import SettingsDep, TeamScopeDep, TodayDep
 from app.api.v1.presenters import occurrence_out
 from app.db import SessionDep
 from app.errors import AppError
 from app.schemas.calendar import CalendarDayOut, CalendarMonthOut, PlannedItemOut
 from app.schemas.payment import OccurrenceOut
+from app.schemas.team import TeamBrief
 from app.services.occurrences import ensure_occurrences, views_between
 from app.services.planning import planned_between
 
@@ -37,6 +38,7 @@ async def calendar(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    scope: TeamScopeDep,
     month: Annotated[str | None, Query(description="ГГГГ-ММ; по умолчанию — текущий месяц")] = None,
 ) -> CalendarMonthOut:
     label = month or today.strftime("%Y-%m")
@@ -45,14 +47,18 @@ async def calendar(
     await session.commit()
 
     occurrences: dict[date, list[OccurrenceOut]] = defaultdict(list)
-    for view in await views_between(session, start, end):
+    for view in await views_between(session, start, end, scope):
         out = occurrence_out(view, today=today, remind_days_before=settings.remind_days_before)
         occurrences[out.due_date].append(out)
     planned: dict[date, list[PlannedItemOut]] = defaultdict(list)
-    for item in sorted(await planned_between(session, start, end), key=lambda i: (i.due_date, i.payment.name)):
+    for item in sorted(
+        await planned_between(session, start, end, scope),
+        key=lambda i: (i.due_date, i.payment.name, i.team.name.lower()),
+    ):
         planned[item.due_date].append(
             PlannedItemOut(
                 recurring_payment_id=item.payment.id,
+                team=TeamBrief.model_validate(item.team),
                 name=item.payment.name,
                 due_date=item.due_date,
                 amount=item.payment.amount,

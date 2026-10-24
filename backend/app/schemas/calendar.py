@@ -6,10 +6,12 @@ from pydantic import BaseModel, Field
 
 from app.domain.enums import Currency
 from app.schemas.payment import OccurrenceOut
+from app.schemas.team import TeamBrief
 
 
 class PlannedItemOut(BaseModel):
     recurring_payment_id: uuid.UUID
+    team: TeamBrief
     name: str
     due_date: date
     amount: Decimal

@@ -48,7 +48,7 @@ async def notifications(
     rows, total = await logs_service.list_notifications(
         session, channel=channel, status=status, limit=limit, offset=offset
     )
-    items = [notification_out(n, payment_name=p.name, due_date=o.due_date) for n, o, p in rows]
+    items = [notification_out(n, payment_name=p.name, due_date=o.due_date, team=t) for n, o, p, t in rows]
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 

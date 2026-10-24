@@ -3,7 +3,7 @@
 from datetime import date
 
 from app.domain.status import days_overdue, is_overdue, occurrence_state
-from app.models import AuditLog, Notification, User
+from app.models import AuditLog, Notification, Team, User
 from app.schemas.payment import (
     AuditLogOut,
     NotificationLogOut,
@@ -13,6 +13,7 @@ from app.schemas.payment import (
     RecurringPaymentDetailOut,
     RecurringPaymentOut,
 )
+from app.schemas.team import TeamBrief
 from app.schemas.user import UserBrief
 from app.services.occurrences import OccurrenceDetail, OccurrenceView
 from app.services.payments import PaymentView
@@ -24,6 +25,7 @@ def occurrence_out(view: OccurrenceView, *, today: date, remind_days_before: int
         id=o.id,
         recurring_payment_id=p.id,
         recurring_payment=PaymentBrief(id=p.id, name=p.name, period=p.period, is_deleted=p.deleted_at is not None),
+        team=TeamBrief.model_validate(view.team),
         seq=o.seq,
         due_date=o.due_date,
         amount=o.amount,
@@ -47,7 +49,10 @@ def occurrence_detail_out(detail: OccurrenceDetail, *, today: date, remind_days_
     return OccurrenceDetailOut(
         **base.model_dump(),
         history=[audit_log_out(log, actor) for log, actor in detail.history],
-        reminders=[notification_out(n, payment_name=p.name, due_date=o.due_date) for n in detail.reminders],
+        reminders=[
+            notification_out(n, payment_name=p.name, due_date=o.due_date, team=detail.view.team)
+            for n in detail.reminders
+        ],
     )
 
 
@@ -65,12 +70,13 @@ def audit_log_out(log: AuditLog, actor: User | None) -> AuditLogOut:
     )
 
 
-def notification_out(n: Notification, *, payment_name: str, due_date: date) -> NotificationLogOut:
+def notification_out(n: Notification, *, payment_name: str, due_date: date, team: Team | None) -> NotificationLogOut:
     return NotificationLogOut(
         id=n.id,
         occurrence_id=n.occurrence_id,
         payment_name=payment_name,
         due_date=due_date,
+        team=TeamBrief.model_validate(team) if team else None,
         channel=n.channel,
         kind=n.kind,
         status=n.status,
@@ -93,6 +99,7 @@ def payment_out(view: PaymentView, *, today: date, remind_days_before: int) -> R
         period=p.period,
         first_due_date=p.first_due_date,
         end_date=p.end_date,
+        team=TeamBrief.model_validate(view.team) if view.team else None,
         is_active=p.is_active,
         deleted_at=p.deleted_at,
         created_by=UserBrief.model_validate(view.created_by),

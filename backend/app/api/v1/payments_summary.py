@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import SettingsDep, TodayDep
+from app.api.deps import SettingsDep, TeamScopeDep, TodayDep
 from app.db import SessionDep
 from app.errors import AppError
 from app.schemas.summary import CurrencyTotalOut, SummaryOut, SummaryPeriod
@@ -26,6 +26,7 @@ async def summary(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    scope: TeamScopeDep,
     date_from: Annotated[
         date | None, Query(description="Начало периода; по умолчанию — 1-е число текущего месяца")
     ] = None,
@@ -42,7 +43,7 @@ async def summary(
     await ensure_occurrences(session, today=today, horizon_days=settings.occurrence_horizon_days)
     await session.commit()
     on_date = as_of or today
-    totals = await currency_totals(session, start=start, end=end, as_of=on_date)
+    totals = await currency_totals(session, start=start, end=end, as_of=on_date, scope=scope)
     return SummaryOut(
         period=SummaryPeriod(from_=start, to=end),
         as_of=on_date,

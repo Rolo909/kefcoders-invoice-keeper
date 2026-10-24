@@ -3,7 +3,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Query, Request, status
 
-from app.api.deps import AdminUser, RemindersDep, SettingsDep, TodayDep, client_ip, utc_now
+from app.api.deps import (
+    ActorScopeDep,
+    AdminUser,
+    RemindersDep,
+    SettingsDep,
+    TeamScopeDep,
+    TodayDep,
+    client_ip,
+    utc_now,
+)
 from app.api.v1.presenters import payment_detail_out, payment_out
 from app.db import SessionDep
 from app.domain.enums import Currency
@@ -22,6 +31,7 @@ async def list_payments(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    scope: TeamScopeDep,
     include_deleted: Annotated[bool, Query(description="Показать и прекращённые платежи")] = False,
     currency: Currency | None = None,
     q: Annotated[str | None, Query(max_length=200, description="Поиск по названию")] = None,
@@ -31,7 +41,7 @@ async def list_payments(
     await ensure_occurrences(session, today=today, horizon_days=settings.occurrence_horizon_days)
     await session.commit()
     views = await payments_service.list_payments(
-        session, include_deleted=include_deleted, currency=currency, query=q, today=today
+        session, include_deleted=include_deleted, currency=currency, query=q, today=today, scope=scope
     )
     items = [payment_out(v, today=today, remind_days_before=settings.remind_days_before) for v in views]
     return Page(items=items[offset : offset + limit], total=len(items), limit=limit, offset=offset)
@@ -53,6 +63,7 @@ async def create_payment(
     today: TodayDep,
     reminders: RemindersDep,
     background: BackgroundTasks,
+    scope: ActorScopeDep,
 ) -> RecurringPaymentOut:
     payment = await payments_service.create_payment(
         session,
@@ -64,7 +75,7 @@ async def create_payment(
     )
     # Платёж добавили позже, чем за N дней до срока, — напоминание сразу, не дожидаясь проверки worker'а.
     background.add_task(reminders.run, payment_id=payment.id)
-    view, _ = await payments_service.get_payment(session, payment.id, today=today)
+    view, _ = await payments_service.get_payment(session, payment.id, today=today, scope=scope)
     return payment_out(view, today=today, remind_days_before=settings.remind_days_before)
 
 
@@ -75,9 +86,9 @@ async def create_payment(
     responses=_NOT_FOUND,
 )
 async def get_payment(
-    payment_id: uuid.UUID, session: SessionDep, settings: SettingsDep, today: TodayDep
+    payment_id: uuid.UUID, session: SessionDep, settings: SettingsDep, today: TodayDep, scope: TeamScopeDep
 ) -> RecurringPaymentDetailOut:
-    view, occurrences = await payments_service.get_payment(session, payment_id, today=today)
+    view, occurrences = await payments_service.get_payment(session, payment_id, today=today, scope=scope)
     return payment_detail_out(view, occurrences, today=today, remind_days_before=settings.remind_days_before)
 
 

@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request, status
 
-from app.api.deps import CurrentUser, SettingsDep, TodayDep, client_ip, utc_now
+from app.api.deps import ActorScopeDep, CurrentUser, SettingsDep, TeamScopeDep, TodayDep, client_ip, utc_now
 from app.api.v1.presenters import occurrence_detail_out, occurrence_out
 from app.db import SessionDep
 from app.domain.enums import Currency, OccurrenceState, OccurrenceStatus
@@ -12,6 +12,7 @@ from app.schemas.common import DEFAULT_PAGE_SIZE, LimitQuery, OffsetQuery, Page
 from app.schemas.payment import OccurrenceDetailOut, OccurrenceOut, OccurrenceUpdate
 from app.services import occurrences as occurrences_service
 from app.services.occurrences import OccurrenceFilter
+from app.services.scope import visible_occurrence
 
 router = APIRouter(prefix="/payment-occurrences", tags=["payment-occurrences"])
 
@@ -29,6 +30,7 @@ async def list_occurrences(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    scope: TeamScopeDep,
     status_: Annotated[OccurrenceStatus | None, Query(alias="status")] = None,
     overdue: Annotated[bool | None, Query(description="true — только просроченные, false — без просрочки")] = None,
     state: OccurrenceState | None = None,
@@ -59,6 +61,7 @@ async def list_occurrences(
         offset=offset,
         today=today,
         remind_days_before=settings.remind_days_before,
+        scope=scope,
     )
     items = [occurrence_out(v, today=today, remind_days_before=settings.remind_days_before) for v in views]
     return Page(items=items, total=total, limit=limit, offset=offset)
@@ -71,8 +74,9 @@ async def list_occurrences(
     responses=_NOT_FOUND,
 )
 async def get_occurrence(
-    occurrence_id: uuid.UUID, session: SessionDep, settings: SettingsDep, today: TodayDep
+    occurrence_id: uuid.UUID, session: SessionDep, settings: SettingsDep, today: TodayDep, scope: ActorScopeDep
 ) -> OccurrenceDetailOut:
+    await visible_occurrence(session, scope, occurrence_id)
     detail = await occurrences_service.get_occurrence_detail(session, occurrence_id)
     return occurrence_detail_out(detail, today=today, remind_days_before=settings.remind_days_before)
 
@@ -97,7 +101,9 @@ async def update_occurrence(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    scope: ActorScopeDep,
 ) -> OccurrenceOut:
+    await visible_occurrence(session, scope, occurrence_id)
     view = await occurrences_service.update_occurrence(
         session,
         occurrence_id,

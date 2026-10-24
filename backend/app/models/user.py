@@ -14,11 +14,12 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.domain.enums import Role
 from app.models.base import CreatedAtMixin, UuidPkMixin, pg_enum
+from app.models.team import Team
 
 
 class User(UuidPkMixin, CreatedAtMixin, Base):
@@ -39,6 +40,8 @@ class User(UuidPkMixin, CreatedAtMixin, Base):
     email: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(pg_enum(Role, "user_role"))
     team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
+    # Команда нужна почти в каждом ответе о пользователе — грузим сразу, без отдельного запроса.
+    team: Mapped[Team | None] = relationship(lazy="joined", viewonly=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     notify_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

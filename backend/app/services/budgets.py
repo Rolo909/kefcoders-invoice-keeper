@@ -9,13 +9,14 @@ from app.models import Budget, User
 from app.schemas.budget import BudgetItem
 from app.services import audit
 from app.services.audit import AuditAction
+from app.services.scope import TeamScope
 from app.services.users import get_team_or_422
 
 _UNIQUE_KEY = "uq_budgets_team_id_currency_period_type_year_month"
 
 
-async def list_budgets(session: AsyncSession, *, year: int, month: int) -> list[Budget]:
-    """Годовые бюджеты года и месячные — выбранного месяца."""
+async def list_budgets(session: AsyncSession, *, year: int, month: int, scope: TeamScope) -> list[Budget]:
+    """Годовые бюджеты года и месячные — выбранного месяца, у видимых команд."""
     stmt = (
         select(Budget)
         .where(
@@ -24,8 +25,9 @@ async def list_budgets(session: AsyncSession, *, year: int, month: int) -> list[
                 Budget.period_type == BudgetPeriodType.YEAR,
                 (Budget.period_type == BudgetPeriodType.MONTH) & (Budget.month == month),
             ),
+            *scope.where(Budget.team_id),
         )
-        .order_by(Budget.period_type, Budget.currency)
+        .order_by(Budget.team_id, Budget.period_type, Budget.currency)
     )
     return list(await session.scalars(stmt))
 

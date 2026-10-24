@@ -15,6 +15,7 @@ from app.domain.enums import (
     Period,
 )
 from app.models.base import MONEY_PRECISION, MONEY_SCALE
+from app.schemas.team import TeamBrief
 from app.schemas.user import UserBrief
 
 NAME_MAX_LENGTH = 200
@@ -36,6 +37,7 @@ class OccurrenceOut(BaseModel):
     id: uuid.UUID
     recurring_payment_id: uuid.UUID
     recurring_payment: PaymentBrief
+    team: TeamBrief = Field(description="Команда, которая платит этот период")
     seq: int
     due_date: date
     amount: Decimal
@@ -69,6 +71,7 @@ class NotificationLogOut(BaseModel):
     occurrence_id: uuid.UUID
     payment_name: str
     due_date: date
+    team: TeamBrief | None
     channel: NotificationChannel
     kind: NotificationKind
     status: NotificationStatus
@@ -92,6 +95,7 @@ class RecurringPaymentOut(BaseModel):
     period: Period
     first_due_date: date
     end_date: date | None
+    team: TeamBrief | None = Field(description="Команда платежа; null — общий платёж всех команд")
     is_active: bool
     deleted_at: datetime | None
     created_by: UserBrief
@@ -113,6 +117,9 @@ class RecurringPaymentCreate(BaseModel):
     period: Period = Period.MONTHLY
     next_due_date: date = Field(description="Дата ближайшей оплаты — от неё считаются все следующие сроки")
     end_date: date | None = Field(default=None, description="Последняя дата, до которой повторяется платёж")
+    team_id: uuid.UUID | None = Field(
+        default=None, description="Команда платежа; не передан или null — общий: каждая команда платит за себя"
+    )
 
     @field_validator("name")
     @classmethod

@@ -6,10 +6,11 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, SettingsDep, TodayDep
+from app.api.deps import ActorScopeDep, CurrentUser, SettingsDep, TodayDep
 from app.db import SessionDep
 from app.domain.enums import Currency, NotificationKind, OccurrenceState
 from app.domain.status import occurrence_state
+from app.schemas.team import TeamBrief
 from app.services import inbox as inbox_service
 
 router = APIRouter(prefix="/inbox", tags=["inbox"])
@@ -18,6 +19,7 @@ router = APIRouter(prefix="/inbox", tags=["inbox"])
 class InboxItemOut(BaseModel):
     id: uuid.UUID
     occurrence_id: uuid.UUID
+    team: TeamBrief
     kind: NotificationKind
     created_at: datetime
     read: bool
@@ -41,13 +43,15 @@ async def inbox(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    scope: ActorScopeDep,
     unread_only: Annotated[bool, Query(description="Только непрочитанные")] = False,
 ) -> InboxOut:
-    entries, unread = await inbox_service.list_inbox(session, user, unread_only=unread_only)
+    entries, unread = await inbox_service.list_inbox(session, user, unread_only=unread_only, scope=scope)
     items = [
         InboxItemOut(
             id=e.notification.id,
             occurrence_id=e.occurrence.id,
+            team=TeamBrief.model_validate(e.team),
             kind=e.notification.kind,
             created_at=e.notification.created_at,
             read=e.read,
@@ -65,12 +69,12 @@ async def inbox(
 
 
 @router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT, summary="Отметить все уведомления прочитанными")
-async def read_all(user: CurrentUser, session: SessionDep) -> None:
-    await inbox_service.mark_all_read(session, user)
+async def read_all(user: CurrentUser, session: SessionDep, scope: ActorScopeDep) -> None:
+    await inbox_service.mark_all_read(session, user, scope=scope)
 
 
 @router.post(
     "/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT, summary="Отметить уведомление прочитанным"
 )
-async def read_one(notification_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
-    await inbox_service.mark_read(session, user, notification_id)
+async def read_one(notification_id: uuid.UUID, user: CurrentUser, session: SessionDep, scope: ActorScopeDep) -> None:
+    await inbox_service.mark_read(session, user, notification_id, scope=scope)

@@ -1,21 +1,24 @@
 """Регулярные платежи: создание, прекращение с сохранением истории, списки."""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from fastapi import status
-from sqlalchemy import case, delete, select
+from sqlalchemy import ColumnElement, case, delete, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import Currency, OccurrenceStatus
 from app.errors import AppError, not_found
-from app.models import PaymentOccurrence, RecurringPayment, User
+from app.models import PaymentOccurrence, RecurringPayment, Team, User
 from app.schemas.payment import RecurringPaymentCreate
 from app.services import audit
 from app.services.audit import AuditAction
 from app.services.occurrences import OccurrenceView, ensure_occurrences, payment_views, views_by_ids
+from app.services.scope import TeamScope, visible_payment
+from app.services.users import get_team_or_422
 
 # Защита от случайной даты в далёком прошлом: каждая неделя/месяц стали бы просроченным периодом.
 MAX_PAST_DAYS = 366
@@ -24,6 +27,7 @@ MAX_PAST_DAYS = 366
 @dataclass(frozen=True)
 class PaymentView:
     payment: RecurringPayment
+    team: Team | None
     created_by: User
     next_occurrence: OccurrenceView | None
 
@@ -43,6 +47,7 @@ async def create_payment(
             "validation_error",
             "Дата ближайшей оплаты — не раньше чем год назад",
         )
+    team = None if data.team_id is None else await get_team_or_422(session, data.team_id)
     payment = RecurringPayment(
         name=data.name,
         description=data.description,
@@ -52,6 +57,7 @@ async def create_payment(
         first_due_date=data.next_due_date,
         end_date=data.end_date,
         created_by=actor.id,
+        team_id=None if team is None else team.id,
     )
     session.add(payment)
     await session.flush()
@@ -67,6 +73,7 @@ async def create_payment(
             "currency": payment.currency.value,
             "period": payment.period.value,
             "first_due_date": payment.first_due_date.isoformat(),
+            "team_name": None if team is None else team.name,
         },
         ip=ip,
     )
@@ -107,9 +114,13 @@ async def stop_payment(
 
 
 async def _next_occurrence_ids(
-    session: AsyncSession, payment_ids: list[uuid.UUID], today: date
+    session: AsyncSession,
+    payment_ids: list[uuid.UUID],
+    today: date,
+    team_conditions: Sequence[ColumnElement[bool]] = (),
 ) -> dict[uuid.UUID, uuid.UUID]:
-    """Ближайший период: самый ранний неоплаченный, а если все оплачены — ближайший будущий."""
+    """Ближайший период среди видимых команд: самый ранний неоплаченный, а если все оплачены — ближайший
+    будущий. У общего платежа в режиме «все команды» — самый ранний из команд."""
     occ = PaymentOccurrence
     priority = case((occ.status == OccurrenceStatus.UNPAID, 0), else_=1)
     rows = await session.execute(
@@ -117,6 +128,7 @@ async def _next_occurrence_ids(
         .where(
             occ.recurring_payment_id.in_(payment_ids),
             (occ.status == OccurrenceStatus.UNPAID) | (occ.due_date >= today),
+            *team_conditions,
         )
         .ext(distinct_on(occ.recurring_payment_id))
         .order_by(occ.recurring_payment_id, priority, occ.due_date)
@@ -125,10 +137,21 @@ async def _next_occurrence_ids(
 
 
 async def list_payments(
-    session: AsyncSession, *, include_deleted: bool, currency: Currency | None, query: str | None, today: date
+    session: AsyncSession,
+    *,
+    include_deleted: bool,
+    currency: Currency | None,
+    query: str | None,
+    today: date,
+    scope: TeamScope,
 ) -> list[PaymentView]:
-    """Сначала действующие платежи, внутри — по ближайшему сроку; затем прекращённые."""
-    stmt = select(RecurringPayment, User).join(User, User.id == RecurringPayment.created_by)
+    """Платежи видимых команд и общие. Сначала действующие, внутри — по ближайшему сроку; затем прекращённые."""
+    stmt = (
+        select(RecurringPayment, Team, User)
+        .join(User, User.id == RecurringPayment.created_by)
+        .outerjoin(Team, Team.id == RecurringPayment.team_id)
+        .where(*scope.payments_where())
+    )
     if not include_deleted:
         stmt = stmt.where(RecurringPayment.deleted_at.is_(None))
     if currency is not None:
@@ -137,9 +160,13 @@ async def list_payments(
         stmt = stmt.where(RecurringPayment.name.icontains(query.strip(), autoescape=True))
     rows = (await session.execute(stmt)).all()
 
-    next_ids = await _next_occurrence_ids(session, [p.id for p, _ in rows], today)
+    team_conditions = scope.where(PaymentOccurrence.team_id)
+    next_ids = await _next_occurrence_ids(session, [p.id for p, _, _ in rows], today, team_conditions)
     next_views = await views_by_ids(session, list(next_ids.values()))
-    views = [PaymentView(p, author, next_views[next_ids[p.id]] if p.id in next_ids else None) for p, author in rows]
+    views = [
+        PaymentView(p, team, author, next_views[next_ids[p.id]] if p.id in next_ids else None)
+        for p, team, author in rows
+    ]
 
     def sort_key(view: PaymentView) -> tuple[bool, date, str]:
         next_due = view.next_occurrence.occurrence.due_date if view.next_occurrence else date.max
@@ -149,19 +176,15 @@ async def list_payments(
 
 
 async def get_payment(
-    session: AsyncSession, payment_id: uuid.UUID, *, today: date
+    session: AsyncSession, payment_id: uuid.UUID, *, today: date, scope: TeamScope
 ) -> tuple[PaymentView, list[OccurrenceView]]:
-    row = (
-        await session.execute(
-            select(RecurringPayment, User)
-            .join(User, User.id == RecurringPayment.created_by)
-            .where(RecurringPayment.id == payment_id)
-        )
-    ).first()
-    if row is None:
-        raise not_found("Платёж не найден")
-    payment, author = row
-    occurrences = await payment_views(session, payment_id)
-    next_ids = await _next_occurrence_ids(session, [payment_id], today)
+    """Платёж с периодами. У платежа команды — всегда её периоды (администратор мог открыть его по ссылке,
+    выбрав другую команду); у общего — периоды видимых команд."""
+    payment = await visible_payment(session, scope, payment_id)
+    author = (await session.scalars(select(User).where(User.id == payment.created_by))).one()
+    team_conditions = [] if payment.team_id is not None else scope.where(PaymentOccurrence.team_id)
+    occurrences = await payment_views(session, payment_id, team_conditions)
+    next_ids = await _next_occurrence_ids(session, [payment_id], today, team_conditions)
     next_view = next((v for v in occurrences if v.occurrence.id == next_ids.get(payment_id)), None)
-    return PaymentView(payment, author, next_view), occurrences
+    team = None if payment.team_id is None else await session.get(Team, payment.team_id)
+    return PaymentView(payment, team, author, next_view), occurrences

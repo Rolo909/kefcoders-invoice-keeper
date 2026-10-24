@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ValidationError
 from starlette.datastructures import UploadFile
 
-from app.api.deps import CurrentUser, SettingsDep, client_ip
+from app.api.deps import ActorScopeDep, CurrentUser, SettingsDep, client_ip
 from app.config import Settings
 from app.db import SessionDep
 from app.domain.enums import AttachmentKind
@@ -16,6 +16,7 @@ from app.errors import AppError
 from app.schemas.user import UserBrief
 from app.services import attachments as attachments_service
 from app.services.attachments import AttachmentView
+from app.services.scope import visible_attachment, visible_occurrence
 
 router = APIRouter(tags=["attachments"])
 
@@ -88,7 +89,8 @@ _UPLOAD_BODY: dict[str, Any] = {
     response_model=list[AttachmentOut],
     summary="Чеки и ссылки, прикреплённые к оплате",
 )
-async def list_attachments(occurrence_id: uuid.UUID, session: SessionDep) -> list[AttachmentOut]:
+async def list_attachments(occurrence_id: uuid.UUID, session: SessionDep, scope: ActorScopeDep) -> list[AttachmentOut]:
+    await visible_occurrence(session, scope, occurrence_id)
     return [_out(v) for v in await attachments_service.list_attachments(session, occurrence_id)]
 
 
@@ -100,8 +102,14 @@ async def list_attachments(occurrence_id: uuid.UUID, session: SessionDep) -> lis
     openapi_extra=_UPLOAD_BODY,
 )
 async def add_attachment(
-    occurrence_id: uuid.UUID, request: Request, user: CurrentUser, session: SessionDep, settings: SettingsDep
+    occurrence_id: uuid.UUID,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+    scope: ActorScopeDep,
 ) -> AttachmentOut:
+    await visible_occurrence(session, scope, occurrence_id)  # до чтения файла: чужой период — 404
     ip = client_ip(request)
     if request.headers.get("content-type", "").startswith("multipart/form-data"):
         form = await request.form(max_files=1, max_fields=1)
@@ -132,7 +140,10 @@ async def add_attachment(
     summary="Скачать файл чека",
     responses={status.HTTP_404_NOT_FOUND: {"description": "Вложение не найдено или это ссылка"}},
 )
-async def download(attachment_id: uuid.UUID, session: SessionDep, settings: SettingsDep) -> FileResponse:
+async def download(
+    attachment_id: uuid.UUID, session: SessionDep, settings: SettingsDep, scope: ActorScopeDep
+) -> FileResponse:
+    await visible_attachment(session, scope, attachment_id)
     attachment, path = await attachments_service.get_file(session, attachment_id, upload_dir=_upload_dir(settings))
     return FileResponse(
         path,
@@ -149,8 +160,14 @@ async def download(attachment_id: uuid.UUID, session: SessionDep, settings: Sett
     summary="Удалить вложение (автор или администратор)",
 )
 async def delete_attachment(
-    attachment_id: uuid.UUID, request: Request, user: CurrentUser, session: SessionDep, settings: SettingsDep
+    attachment_id: uuid.UUID,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+    scope: ActorScopeDep,
 ) -> None:
+    await visible_attachment(session, scope, attachment_id)
     await attachments_service.delete_attachment(
         session, attachment_id, actor=user, upload_dir=_upload_dir(settings), ip=client_ip(request)
     )

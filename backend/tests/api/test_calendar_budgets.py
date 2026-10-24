@@ -63,7 +63,9 @@ async def test_calendar_groups_periods_by_day(api: AsyncClient, admin_token: str
     assert {d["planned"] == [] for d in body["days"]} == {True}
 
 
-async def test_far_month_shows_planned_dues_without_created_periods(api: AsyncClient, admin_token: str) -> None:
+async def test_far_month_shows_planned_dues_without_created_periods(
+    api: AsyncClient, admin_token: str, team: Team
+) -> None:
     payment = await add_payment(
         api, admin_token, name="Аренда", amount="50000", currency="RUB", next_due_date="2026-01-31"
     )
@@ -76,6 +78,7 @@ async def test_far_month_shows_planned_dues_without_created_periods(api: AsyncCl
     assert day["planned"] == [
         {
             "recurring_payment_id": payment["id"],
+            "team": {"id": str(team.id), "name": team.name},  # общий платёж планируется у каждой команды
             "name": "Аренда",
             "due_date": "2027-02-28",
             "amount": "50000.00",

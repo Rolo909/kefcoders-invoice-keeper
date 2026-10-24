@@ -15,6 +15,7 @@ from app.security import hash_password
 from app.services import audit
 from app.services.audit import AuditAction
 from app.services.auth import find_user_by_login, revoke_user_sessions
+from app.services.scope import TeamScope
 
 
 def _login_taken(login: str) -> AppError:
@@ -29,10 +30,16 @@ async def get_team_or_422(session: AsyncSession, team_id: uuid.UUID) -> Team:
     return team
 
 
-async def list_users(session: AsyncSession, *, limit: int, offset: int) -> tuple[list[User], int]:
-    total = await session.scalar(select(func.count()).select_from(User)) or 0
+async def list_users(session: AsyncSession, *, limit: int, offset: int, scope: TeamScope) -> tuple[list[User], int]:
+    """Все пользователи или участники выбранной команды; системный админ — первым."""
+    conditions = scope.where(User.team_id)
+    total = await session.scalar(select(func.count()).select_from(User).where(*conditions)) or 0
     users = await session.scalars(
-        select(User).order_by(User.is_system.desc(), User.created_at, User.login).limit(limit).offset(offset)
+        select(User)
+        .where(*conditions)
+        .order_by(User.is_system.desc(), User.created_at, User.login)
+        .limit(limit)
+        .offset(offset)
     )
     return list(users), total
 

@@ -1,7 +1,8 @@
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import Settings, get_settings
@@ -12,6 +13,7 @@ from app.errors import forbidden, unauthorized
 from app.models import User
 from app.services.auth import AuthContext, LoginRateLimiter, resolve_session
 from app.services.reminders import ReminderDispatcher
+from app.services.scope import TeamScope, resolve_scope
 
 SESSION_COOKIE = "ik_session"
 
@@ -85,4 +87,23 @@ async def require_admin(user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+
+TeamQuery = Annotated[
+    uuid.UUID | None,
+    Query(description="Команда. Пользователю — только своя (чужая — 403); администратору — фильтр, без него все"),
+]
+
+
+async def get_team_scope(user: CurrentUser, session: SessionDep, team_id: TeamQuery = None) -> TeamScope:
+    """Видимые команды списка с необязательным фильтром ?team_id=."""
+    return await resolve_scope(session, user, team_id)
+
+
+async def get_actor_scope(user: CurrentUser, session: SessionDep) -> TeamScope:
+    """Видимые команды без фильтра — для объектов по id: чужой объект пользователю не виден (404)."""
+    return await resolve_scope(session, user, None)
+
+
+TeamScopeDep = Annotated[TeamScope, Depends(get_team_scope)]
+ActorScopeDep = Annotated[TeamScope, Depends(get_actor_scope)]
 LoginLimiterDep = Annotated[LoginRateLimiter, Depends(get_login_limiter)]

@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, User
+from app.models import AuditLog, Team, User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 
 PUBLIC_PATHS = {"/api/v1/health", "/api/v1/auth/login", "/api/v1/docs", "/api/v1/openapi.json"}
@@ -30,7 +30,7 @@ async def test_every_non_public_endpoint_requires_authentication(app: FastAPI, a
             assert response.json()["code"] == "unauthorized"
 
 
-async def test_login_sets_http_only_cookie_and_returns_user(api: AsyncClient, regular_user: User) -> None:
+async def test_login_sets_http_only_cookie_and_returns_user(api: AsyncClient, regular_user: User, team: Team) -> None:
     response = await api.post("/api/v1/auth/login", json={"login": USER_LOGIN, "password": USER_PASSWORD})
 
     assert response.status_code == 200
@@ -43,6 +43,7 @@ async def test_login_sets_http_only_cookie_and_returns_user(api: AsyncClient, re
         "email": None,
         "role": "user",
         "is_system": False,
+        "team": {"id": str(team.id), "name": team.name},
         "telegram_linked": False,
         "notify_email": False,
         "created_at": body["user"]["created_at"],

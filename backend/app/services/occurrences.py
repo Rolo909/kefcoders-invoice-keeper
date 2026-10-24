@@ -27,6 +27,7 @@ from app.errors import AppError, not_found
 from app.models import Attachment, AuditLog, Notification, PaymentOccurrence, RecurringPayment, Team, User
 from app.services import audit
 from app.services.audit import AuditAction
+from app.services.scope import TeamScope
 
 Occ = PaymentOccurrence
 PaidBy = aliased(User, name="paid_by_user")
@@ -143,6 +144,7 @@ async def ensure_occurrences(
 class OccurrenceView:
     occurrence: PaymentOccurrence
     payment: RecurringPayment
+    team: Team
     paid_by: User | None
     attachments_count: int
     last_reminder_at: datetime | None
@@ -216,16 +218,19 @@ def _view_query() -> Select[Any]:
         .scalar_subquery()
     )
     return (
-        select(Occ, RecurringPayment, PaidBy, attachments_count, last_reminder_at)
+        select(Occ, RecurringPayment, Team, PaidBy, attachments_count, last_reminder_at)
         .join(RecurringPayment, RecurringPayment.id == Occ.recurring_payment_id)
+        .join(Team, Team.id == Occ.team_id)
         .outerjoin(PaidBy, PaidBy.id == Occ.paid_by)
     )
 
 
 async def _load_views(session: AsyncSession, stmt: Select[Any]) -> list[OccurrenceView]:
     return [
-        OccurrenceView(occurrence=o, payment=p, paid_by=u, attachments_count=count or 0, last_reminder_at=reminded)
-        for o, p, u, count, reminded in await session.execute(stmt)
+        OccurrenceView(
+            occurrence=o, payment=p, team=t, paid_by=u, attachments_count=count or 0, last_reminder_at=reminded
+        )
+        for o, p, t, u, count, reminded in await session.execute(stmt)
     ]
 
 
@@ -270,8 +275,9 @@ async def list_occurrences(
     offset: int,
     today: date,
     remind_days_before: int,
+    scope: TeamScope,
 ) -> tuple[list[OccurrenceView], int]:
-    conditions = _filter_conditions(filters, today, remind_days_before)
+    conditions = [*_filter_conditions(filters, today, remind_days_before), *scope.where(Occ.team_id)]
     total = await session.scalar(select(func.count()).select_from(Occ).where(*conditions)) or 0
     stmt = _view_query().where(*conditions).order_by(*_order_by(sort, today)).limit(limit).offset(offset)
     return await _load_views(session, stmt), total
@@ -284,15 +290,25 @@ async def views_by_ids(session: AsyncSession, ids: Sequence[uuid.UUID]) -> dict[
     return {view.occurrence.id: view for view in views}
 
 
-async def payment_views(session: AsyncSession, payment_id: uuid.UUID) -> list[OccurrenceView]:
-    """Все периоды платежа, новые сверху."""
-    stmt = _view_query().where(Occ.recurring_payment_id == payment_id).order_by(Occ.due_date.desc())
+async def payment_views(
+    session: AsyncSession, payment_id: uuid.UUID, team_conditions: Sequence[ColumnElement[bool]] = ()
+) -> list[OccurrenceView]:
+    """Периоды платежа (по командам из условий), новые сверху; в один день — по названию команды."""
+    stmt = (
+        _view_query()
+        .where(Occ.recurring_payment_id == payment_id, *team_conditions)
+        .order_by(Occ.due_date.desc(), func.lower(Team.name), Occ.id)
+    )
     return await _load_views(session, stmt)
 
 
-async def views_between(session: AsyncSession, start: date, end: date) -> list[OccurrenceView]:
-    """Все периоды со сроком в [start, end] — для календаря, по сроку и названию."""
-    stmt = _view_query().where(Occ.due_date.between(start, end)).order_by(Occ.due_date, RecurringPayment.name, Occ.id)
+async def views_between(session: AsyncSession, start: date, end: date, scope: TeamScope) -> list[OccurrenceView]:
+    """Периоды видимых команд со сроком в [start, end] — для календаря, по сроку и названию."""
+    stmt = (
+        _view_query()
+        .where(Occ.due_date.between(start, end), *scope.where(Occ.team_id))
+        .order_by(Occ.due_date, RecurringPayment.name, func.lower(Team.name), Occ.id)
+    )
     return await _load_views(session, stmt)
 
 
