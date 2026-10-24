@@ -298,9 +298,10 @@ export const handlers = [
     } else if (b.status === 'paid') {
       const date = isDate(b.paid_date) ? b.paid_date : t;
       if (o.status === 'paid') {
-        const was = o.paid_date;
-        o.paid_date = date;
-        if (was !== date) audit(db, me, 'occurrence.change_paid_date', ['occurrence', o.id], occDetails(o, { old_paid_date: was, new_paid_date: date }));
+        // Кто-то уже отметил оплату — не перезаписываем молча (как на бэкенде). Дату меняют запросом с одной paid_date.
+        const payer = brief(o.paid_by);
+        const when = o.paid_date ? o.paid_date.split('-').reverse().join('.') : '—';
+        return fail(409, `Уже оплачено: ${payer?.full_name ?? payer?.login ?? 'другой пользователь'}, ${when}. Обновите страницу.`, 'already_paid');
       } else {
         Object.assign(o, { status: 'paid', paid_date: date, paid_by: me.id, paid_marked_at: nowIso() });
         audit(db, me, 'occurrence.mark_paid', ['occurrence', o.id], occDetails(o, { paid_date: date }));

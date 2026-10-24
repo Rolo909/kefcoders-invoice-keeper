@@ -52,6 +52,11 @@ def _paid_line(user: User | None, paid_date: date | None) -> str:
     return f"✅ Оплачено: {who}, {format_date(paid_date) if paid_date else '—'}"
 
 
+def already_paid_text(paid_by: User | None, paid_date: date | None) -> str:
+    who = _display_name(paid_by) if paid_by else "другой пользователь"
+    return f"Уже оплачено: {who}, {format_date(paid_date) if paid_date else '—'}. Повторно оплачивать не нужно."
+
+
 async def start(message: Message) -> None:
     await message.answer(START_TEXT)
 
@@ -99,13 +104,14 @@ async def pay(callback: CallbackQuery, session_factory: SessionFactory, timezone
     if outcome.result is PayResult.PAID:
         await callback.answer("Отмечено как оплаченное")
     else:
-        await callback.answer(f"Уже оплачено {format_date(outcome.paid_date) if outcome.paid_date else ''}".strip())
+        # Нажали одновременно или по устаревшему сообщению: оплату второй раз не отмечаем.
+        await callback.answer(already_paid_text(outcome.paid_by, outcome.paid_date), show_alert=True)
     # Убираем кнопку и дописываем, кто оплатил, — чтобы весь чат видел, что вопрос закрыт.
     message = callback.message
     if isinstance(message, Message) and message.html_text and "✅ Оплачено:" not in message.html_text:
         with contextlib.suppress(TelegramBadRequest):  # сообщение слишком старое или уже изменено
             await message.edit_text(
-                f"{message.html_text}\n\n{_paid_line(outcome.user, outcome.paid_date)}",
+                f"{message.html_text}\n\n{_paid_line(outcome.paid_by, outcome.paid_date)}",
                 parse_mode=ParseMode.HTML,
                 reply_markup=None,
             )

@@ -284,6 +284,13 @@ def _details(view: OccurrenceView, **extra: date | None) -> dict[str, str | None
     return {"payment_name": view.payment.name} | {k: v.isoformat() if v else None for k, v in values.items()}
 
 
+def already_paid(paid_by: User | None, paid_date: date | None) -> AppError:
+    """Повторная отметка оплаты: сообщаем, кто и когда уже оплатил, чтобы не заплатить дважды."""
+    who = (paid_by.full_name or paid_by.login) if paid_by else "другой пользователь"
+    when = paid_date.strftime("%d.%m.%Y") if paid_date else "—"
+    return AppError(status.HTTP_409_CONFLICT, "already_paid", f"Уже оплачено: {who}, {when}. Обновите страницу.")
+
+
 def _validation_error(detail: str) -> AppError:
     return AppError(status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", detail)
 
@@ -299,7 +306,11 @@ async def update_occurrence(
     now: datetime,
     ip: str | None,
 ) -> OccurrenceView:
-    """Отметить оплату / отменить её / исправить фактическую дату. Срок периода не меняется никогда."""
+    """Отметить оплату / отменить её / исправить фактическую дату. Срок периода не меняется никогда.
+
+    status=paid — только для неоплаченного периода (иначе 409 already_paid); дату оплаченного
+    исправляют запросом с одной paid_date.
+    """
     if new_status is None and paid_date is None:
         raise _validation_error("Передайте status или paid_date")
     if paid_date is not None and paid_date > today:
@@ -319,7 +330,10 @@ async def update_occurrence(
         occurrence.status = OccurrenceStatus.UNPAID
         occurrence.paid_date = occurrence.paid_by = occurrence.paid_marked_at = None
         log(AuditAction.OCCURRENCE_MARK_UNPAID, old_paid_date=old_paid_date)
-    elif occurrence.status is OccurrenceStatus.PAID:
+    elif occurrence.status is OccurrenceStatus.PAID and new_status is OccurrenceStatus.PAID:
+        # Кто-то уже отметил оплату (например, одновременно с вами) — не перезаписываем молча.
+        raise already_paid(view.paid_by, occurrence.paid_date)
+    elif occurrence.status is OccurrenceStatus.PAID:  # передана только paid_date — исправление даты
         new_date = paid_date or today
         if new_date != old_paid_date:
             occurrence.paid_date = new_date

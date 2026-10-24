@@ -56,7 +56,8 @@ export function usePaymentActions() {
 
   const changeDate = async (occ: Occurrence, paidDate: ISODate) => {
     const wasLate = !!occ.paid_date && occ.paid_date > occ.due_date;
-    await update.mutateAsync({ id: occ.id, status: 'paid', paid_date: paidDate });
+    // Только дата: status=paid у уже оплаченного периода сервер отклонит как повторную оплату (409 already_paid).
+    await update.mutateAsync({ id: occ.id, paid_date: paidDate });
     const late = lateBy(occ.due_date, paidDate);
     toast(`Дата оплаты: ${date(paidDate)}. ${wasLate && late <= 0 ? 'Просрочка снята.' : late > 0 ? `Оплачено с опозданием на ${days(late)}.` : 'Оплачено вовремя.'}`);
   };

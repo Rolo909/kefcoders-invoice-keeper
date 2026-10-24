@@ -113,8 +113,9 @@ class PayResult(StrEnum):
 @dataclass(frozen=True)
 class PayOutcome:
     result: PayResult
-    user: User | None = None
+    user: User | None = None  # кто нажал кнопку
     paid_date: date | None = None
+    paid_by: User | None = None  # кто на самом деле отметил оплату (для «Уже оплачено»)
 
 
 async def mark_paid_from_telegram(
@@ -141,7 +142,9 @@ async def mark_paid_from_telegram(
         return PayOutcome(PayResult.NOT_FOUND, user)
     occurrence, payment = row
     if occurrence.status is OccurrenceStatus.PAID:
-        return PayOutcome(PayResult.ALREADY_PAID, user, occurrence.paid_date)
+        # Кто-то уже оплатил (в том числе одновременно с вами) — дату и автора не трогаем.
+        payer = await session.get(User, occurrence.paid_by) if occurrence.paid_by else None
+        return PayOutcome(PayResult.ALREADY_PAID, user, occurrence.paid_date, payer)
 
     occurrence.status = OccurrenceStatus.PAID
     occurrence.paid_date = today
@@ -159,4 +162,4 @@ async def mark_paid_from_telegram(
         },
     )
     await session.commit()
-    return PayOutcome(PayResult.PAID, user, today)
+    return PayOutcome(PayResult.PAID, user, today, user)

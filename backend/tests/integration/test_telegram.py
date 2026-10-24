@@ -262,3 +262,23 @@ async def test_broken_button_data_is_handled(session_factory: SessionFactory) ->
     await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"))
 
     callback.answer.assert_awaited_once_with(handlers.STALE_BUTTON, show_alert=True)
+
+
+async def test_second_member_sees_who_already_paid(
+    db_session: AsyncSession, linked_user: User, admin: User, period: PaymentOccurrence, session_factory: SessionFactory
+) -> None:
+    code = (await create_link_code(db_session, admin, now=NOW)).code
+    await link_account(db_session, code, telegram_user_id=TG_STRANGER, now=NOW)
+    first = fake_callback(pay_callback_data(period.id), user_id=TG_ANNA, html_text="🔔 <b>Аренда офиса</b>")
+    second = fake_callback(pay_callback_data(period.id), user_id=TG_STRANGER, html_text="🔔 <b>Аренда офиса</b>")
+
+    await handlers.pay(first, session_factory, ZoneInfo("Europe/Moscow"))
+    await handlers.pay(second, session_factory, ZoneInfo("Europe/Moscow"))
+
+    paid_on = period.paid_date.strftime("%d.%m.%Y")  # type: ignore[union-attr]
+    second.answer.assert_awaited_once_with(
+        f"Уже оплачено: Анна, {paid_on}. Повторно оплачивать не нужно.", show_alert=True
+    )
+    # Сообщение подписано тем, кто оплатил, а не тем, кто нажал вторым.
+    assert second.message.edit_text.call_args.args[0].endswith(f"✅ Оплачено: Анна, {paid_on}")
+    assert period.paid_by == linked_user.id

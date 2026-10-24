@@ -458,7 +458,8 @@ paths:
         '404':
           description: Период не найден
         '409':
-          description: Дату можно менять только у оплаченного периода
+          description: already_paid — период уже оплачен (кем и когда — в detail); not_paid — дату можно менять только у оплаченного
+            периода
         '422':
           description: Validation Error
           content:

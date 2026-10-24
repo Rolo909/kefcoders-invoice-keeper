@@ -419,3 +419,31 @@ async def test_payment_far_from_due_date_is_not_reminded_yet(
     await create_payment(api, admin_token, next_due_date="2026-10-25")
 
     assert notifier.sent == []
+
+
+# ---------- повторная отметка оплаты ----------
+
+
+async def test_second_user_cannot_mark_already_paid_period(api: AsyncClient, admin_token: str, user_token: str) -> None:
+    payment = await create_payment(api, admin_token)
+    period_id = payment["next_occurrence"]["id"]
+    await patch_period(api, user_token, period_id, status="paid", paid_date="2026-10-14")
+
+    second = await patch_period(api, admin_token, period_id, status="paid", paid_date="2026-10-15")
+
+    assert second.status_code == 409
+    assert second.json() == {"detail": "Уже оплачено: Анна, 14.10.2026. Обновите страницу.", "code": "already_paid"}
+    period = (await api.get(f"/api/v1/payment-occurrences/{period_id}", headers=bearer(admin_token))).json()
+    assert (period["paid_date"], period["paid_by"]["login"]) == ("2026-10-14", USER_LOGIN)
+    assert [h["action"] for h in period["history"]] == ["occurrence.mark_paid"]
+
+
+async def test_paid_date_is_changed_by_sending_only_the_date(api: AsyncClient, admin_token: str) -> None:
+    payment = await create_payment(api, admin_token)
+    period_id = payment["next_occurrence"]["id"]
+    await patch_period(api, admin_token, period_id, status="paid", paid_date="2026-10-14")
+
+    changed = await patch_period(api, admin_token, period_id, paid_date="2026-10-12")
+
+    assert changed.status_code == 200
+    assert changed.json()["paid_date"] == "2026-10-12"

@@ -75,6 +75,8 @@ export function useUpdateOccurrence() {
     mutationFn: ({ id, ...body }: { id: string; status?: 'paid' | 'unpaid'; paid_date?: string | null }) =>
       api<Occurrence>(`/payment-occurrences/${id}`, { method: 'PATCH', body }),
     onSuccess: () => invalidatePayments(qc),
+    // Например, 409 already_paid: период успели оплатить — подтягиваем свежие данные, кнопка сменится на отметку.
+    onError: () => invalidatePayments(qc),
   });
 }
 

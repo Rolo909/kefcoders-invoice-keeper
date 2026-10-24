@@ -83,7 +83,10 @@ async def get_occurrence(
     summary="Подтверждение или отмена оплаты, исправление фактической даты оплаты",
     responses={
         **_NOT_FOUND,
-        status.HTTP_409_CONFLICT: {"description": "Дату можно менять только у оплаченного периода"},
+        status.HTTP_409_CONFLICT: {
+            "description": "already_paid — период уже оплачен (кем и когда — в detail); "
+            "not_paid — дату можно менять только у оплаченного периода"
+        },
     },
 )
 async def update_occurrence(
