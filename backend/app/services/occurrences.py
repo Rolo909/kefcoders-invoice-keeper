@@ -247,6 +247,12 @@ async def payment_views(session: AsyncSession, payment_id: uuid.UUID) -> list[Oc
     return await _load_views(session, stmt)
 
 
+async def views_between(session: AsyncSession, start: date, end: date) -> list[OccurrenceView]:
+    """Все периоды со сроком в [start, end] — для календаря, по сроку и названию."""
+    stmt = _view_query().where(Occ.due_date.between(start, end)).order_by(Occ.due_date, RecurringPayment.name, Occ.id)
+    return await _load_views(session, stmt)
+
+
 async def _get_view(session: AsyncSession, occurrence_id: uuid.UUID) -> OccurrenceView:
     views = await views_by_ids(session, [occurrence_id])
     if occurrence_id not in views:

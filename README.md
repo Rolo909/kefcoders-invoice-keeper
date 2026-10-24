@@ -146,7 +146,9 @@ React 18, TypeScript, Vite, Mantine, TanStack Query. Подробный план
 | GET | `/docs` | Swagger-документация | все |
 
 Дополнительно: `GET /recurring-payments/{id}` (платёж со всеми периодами), `PATCH /auth/me` (своя почта),
-`POST /telegram/link-code` (код привязки Telegram), `GET /health`. Полная спецификация — [`docs/openapi.yaml`](docs/openapi.yaml).
+`POST /telegram/link-code` (код привязки Telegram), `GET /payments/calendar?month=ГГГГ-ММ` (календарь оплат:
+сроки по дням, включая плановые), `GET` / `PUT /budgets` (бюджеты на месяц и год; менять может администратор),
+`GET /health`. Полная спецификация — [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ## Настройки (`.env`)
 

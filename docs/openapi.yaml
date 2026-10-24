@@ -520,6 +520,120 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/calendar:
+    get:
+      tags:
+      - payments
+      summary: 'Календарь оплат на месяц: сроки по дням, включая плановые'
+      operationId: calendar_api_v1_payments_calendar_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: month
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: ГГГГ-ММ; по умолчанию — текущий месяц
+          title: Month
+        description: ГГГГ-ММ; по умолчанию — текущий месяц
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarMonthOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/budgets:
+    get:
+      tags:
+      - budgets
+      summary: Бюджеты на месяц и на год по валютам
+      operationId: list_budgets_api_v1_budgets_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: year
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 2100
+            minimum: 2000
+          - type: 'null'
+          description: По умолчанию — текущий год
+          title: Year
+        description: По умолчанию — текущий год
+      - name: month
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 12
+            minimum: 1
+          - type: 'null'
+          description: По умолчанию — текущий месяц
+          title: Month
+        description: По умолчанию — текущий месяц
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BudgetItem-Output'
+                title: Response List Budgets Api V1 Budgets Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - budgets
+      summary: Задать бюджеты (только администратор)
+      description: 'Передайте список бюджетов: существующие обновляются, новые создаются.'
+      operationId: save_budgets_api_v1_budgets_put
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/BudgetItem-Input'
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BudgetItem-Output'
+                title: Response Save Budgets Api V1 Budgets Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/users:
     get:
       tags:
@@ -730,6 +844,119 @@ components:
       - details
       - ip
       title: AuditLogOut
+    BudgetItem-Input:
+      properties:
+        currency:
+          $ref: '#/components/schemas/Currency'
+        period_type:
+          $ref: '#/components/schemas/BudgetPeriodType'
+        year:
+          type: integer
+          maximum: 2100.0
+          minimum: 2000.0
+          title: Year
+        month:
+          anyOf:
+          - type: integer
+            maximum: 12.0
+            minimum: 1.0
+          - type: 'null'
+          title: Month
+        amount:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Amount
+          description: Строка с точкой, например «90000.00»
+      additionalProperties: false
+      type: object
+      required:
+      - currency
+      - period_type
+      - year
+      - amount
+      title: BudgetItem
+      description: Бюджет валюты на месяц (month — номер месяца) или на год (month — null).
+    BudgetItem-Output:
+      properties:
+        currency:
+          $ref: '#/components/schemas/Currency'
+        period_type:
+          $ref: '#/components/schemas/BudgetPeriodType'
+        year:
+          type: integer
+          maximum: 2100.0
+          minimum: 2000.0
+          title: Year
+        month:
+          anyOf:
+          - type: integer
+            maximum: 12.0
+            minimum: 1.0
+          - type: 'null'
+          title: Month
+        amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Amount
+          description: Строка с точкой, например «90000.00»
+      additionalProperties: false
+      type: object
+      required:
+      - currency
+      - period_type
+      - year
+      - amount
+      title: BudgetItem
+      description: Бюджет валюты на месяц (month — номер месяца) или на год (month — null).
+    BudgetPeriodType:
+      type: string
+      enum:
+      - month
+      - year
+      title: BudgetPeriodType
+    CalendarDayOut:
+      properties:
+        date:
+          type: string
+          format: date
+          title: Date
+        occurrences:
+          items:
+            $ref: '#/components/schemas/OccurrenceOut'
+          type: array
+          title: Occurrences
+          description: Созданные периоды со сроком в этот день
+        planned:
+          items:
+            $ref: '#/components/schemas/PlannedItemOut'
+          type: array
+          title: Planned
+          description: Будущие сроки, для которых периоды ещё не созданы
+      type: object
+      required:
+      - date
+      - occurrences
+      - planned
+      title: CalendarDayOut
+    CalendarMonthOut:
+      properties:
+        month:
+          type: string
+          title: Month
+          description: ГГГГ-ММ
+        days:
+          items:
+            $ref: '#/components/schemas/CalendarDayOut'
+          type: array
+          title: Days
+          description: Только дни, в которые есть сроки, по возрастанию
+      type: object
+      required:
+      - month
+      - days
+      title: CalendarMonthOut
     Currency:
       type: string
       enum:
@@ -1294,6 +1521,33 @@ components:
       - quarterly
       - yearly
       title: Period
+    PlannedItemOut:
+      properties:
+        recurring_payment_id:
+          type: string
+          format: uuid
+          title: Recurring Payment Id
+        name:
+          type: string
+          title: Name
+        due_date:
+          type: string
+          format: date
+          title: Due Date
+        amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Amount
+        currency:
+          $ref: '#/components/schemas/Currency'
+      type: object
+      required:
+      - recurring_payment_id
+      - name
+      - due_date
+      - amount
+      - currency
+      title: PlannedItemOut
     ProfileUpdate:
       properties:
         email:
@@ -1698,6 +1952,8 @@ tags:
   description: 'Периоды платежей: срок, отметка «Оплачено», фактическая дата'
 - name: payments
   description: Итоги по валютам — отдельно RUB, USD и EUR, без конвертации
+- name: budgets
+  description: Бюджеты по валютам на месяц и год (задаёт администратор)
 - name: users
   description: Обычные пользователи (только для администратора)
 - name: telegram

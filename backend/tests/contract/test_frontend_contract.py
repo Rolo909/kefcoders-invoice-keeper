@@ -172,6 +172,32 @@ async def test_telegram_link_code(api: AsyncClient, tokens: dict[str, str]) -> N
     assert_matches("LinkCode", response.json())
 
 
+async def test_calendar(api: AsyncClient, tokens: dict[str, str], paid_period: dict[str, Any]) -> None:
+    near = await get(api, tokens["user"], "/payments/calendar", month="2026-10")
+    far = await get(api, tokens["user"], "/payments/calendar", month="2027-06")
+
+    assert_matches("CalendarMonth", near)
+    for day in near["days"] + far["days"]:
+        assert_matches("CalendarDay", day)
+        for occurrence in day["occurrences"]:
+            assert_matches("Occurrence", occurrence)
+        for planned in day["planned"]:
+            assert_matches("PlannedItem", planned)
+    assert any(day["planned"] for day in far["days"])
+
+
+async def test_budgets(api: AsyncClient, tokens: dict[str, str]) -> None:
+    items = [
+        {"currency": "RUB", "period_type": "month", "year": 2026, "month": 10, "amount": "90000.00"},
+        {"currency": "EUR", "period_type": "year", "year": 2026, "month": None, "amount": "700.00"},
+    ]
+    saved = await api.put("/api/v1/budgets", json=items, headers=bearer(tokens["admin"]))
+    read = await get(api, tokens["user"], "/budgets", year=2026, month=10)
+
+    for budget in saved.json() + read:
+        assert_matches("Budget", budget)
+
+
 # ---------- ошибки: панель различает их по code и показывает detail ----------
 
 
