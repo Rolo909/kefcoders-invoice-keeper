@@ -1,0 +1,11 @@
+{
+  "name": "invoice-keeper-e2e",
+  "private": true,
+  "description": "Сквозные тесты веб-панели на работающем стеке docker compose",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.48.2"
+  }
+}
