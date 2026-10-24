@@ -1,8 +1,11 @@
 """Тестовые данные для демонстрации (TASK_PLAN §12) — те же, что в имитации API веб-панели.
 
+Расходы хостинг-провайдера (как у aeza.ru): ЦОД и электроэнергия, каналы связи, IPv4-адреса,
+колокация в Европе, лицензии панелей управления, офис и бухгалтерия.
+
 Даты считаются от «сегодня», поэтому сценарий защиты работает в любой день:
-аренда в рублях со сроком через 2 дня (напоминание уходит сразу), сервер в долларах с просрочкой,
-подписка в евро на 31-е число, оплаченная с опозданием, и т. д.
+аренда офиса в рублях со сроком через 2 дня (напоминание уходит сразу), канал связи в долларах
+с просрочкой, стойка в Амстердаме в евро на 31-е число, оплаченная с опозданием, и т. д.
 
 Запуск при старте контейнера: `python -m app.seed` (только если SEED_DEMO_DATA=true).
 Выполняется один раз: маркер — пользователь anna.
@@ -37,14 +40,15 @@ logger = logging.getLogger(__name__)
 MARKER_LOGIN = "anna"
 DEMO_USERS = (
     # логин, пароль, ФИО, почта, напоминания на почту
-    ("anna", "anna12345", "Анна Ковалёва", "anna@kefcoders.ru", True),
-    ("maria", "maria12345", "Мария Лебедева", "maria@kefcoders.ru", False),
+    # Почта в зоне .test — такие адреса не существуют, письма из демо никуда не уйдут.
+    ("anna", "anna12345", "Анна Ковалёва", "anna@aeza.test", True),
+    ("maria", "maria12345", "Мария Лебедева", "maria@aeza.test", False),
     ("user", "user12345", "Дмитрий Орлов", None, False),
 )
 BUDGETS = {  # валюта: (на месяц, на год)
-    Currency.RUB: (Decimal("90000"), Decimal("1100000")),
-    Currency.USD: (Decimal("250"), Decimal("3000")),
-    Currency.EUR: (Decimal("60"), Decimal("700")),
+    Currency.RUB: (Decimal("1100000"), Decimal("13000000")),
+    Currency.USD: (Decimal("6000"), Decimal("70000")),
+    Currency.EUR: (Decimal("7000"), Decimal("80000")),
 }
 _MONTHS = {Period.MONTHLY: 1, Period.QUARTERLY: 3, Period.YEARLY: 12}
 
@@ -92,7 +96,7 @@ def _specs(today: date, anna: User, maria: User) -> list[Spec]:
 
         return rule
 
-    def figma(seq: int, due: date) -> tuple[date, User] | None:
+    def amsterdam(seq: int, due: date) -> tuple[date, User] | None:
         if seq < 2:
             return paid_shifted(0, [maria])(seq, due)
         return paid_shifted(3, [maria])(seq, due) if seq == 2 else None  # оплачено с опозданием
@@ -100,36 +104,36 @@ def _specs(today: date, anna: User, maria: User) -> list[Spec]:
     t = today
     days = timedelta
     return [
-        Spec("Аренда офиса", "Офис на Пушкинской, 12. Договор № 14/2025, оплата до 26-го числа.", "50000.00",
-             Currency.RUB, Period.MONTHLY, _back(t + days(2), Period.MONTHLY, 4),
+        Spec("Аренда офиса, Санкт-Петербург", "Офис поддержки и продаж. Договор № 14/2025, оплата до 26-го числа.",
+             "290000.00", Currency.RUB, Period.MONTHLY, _back(t + days(2), Period.MONTHLY, 4),
              paid_shifted(-1, [anna, maria], before=t + days(2))),
-        Spec("Бухгалтерское сопровождение", "ООО «Баланс-Сервис», ежемесячный счёт.", "25000.00",
+        Spec("Бухгалтерское и налоговое сопровождение", "Аутсорсинговая бухгалтерия, ежемесячный акт.", "65000.00",
              Currency.RUB, Period.MONTHLY, _back(t + days(1), Period.MONTHLY, 4),
              paid_shifted(-1, [anna], before=t + days(1))),
-        Spec("МТС Бизнес, интернет", "Лицевой счёт 7712 0045 8810.", "3900.00",
+        Spec("Электроэнергия, стойки в ЦОД", "Счёт по показаниям счётчиков, 12 стоек в Москве.", "410000.00",
              Currency.RUB, Period.MONTHLY, _back(t - days(4), Period.MONTHLY, 4), paid_shifted(-1, [maria, anna])),
-        Spec("Яндекс 360 для бизнеса", "Почта и диск, 8 пользователей.", "2400.00",
+        Spec("Яндекс 360 для бизнеса", "Корпоративная почта и диск, 45 сотрудников.", "18000.00",
              Currency.RUB, Period.MONTHLY, _back(t - days(23), Period.MONTHLY, 3), paid_shifted(0, [anna, maria])),
-        Spec("Страхование офиса", "Полис «Ингосстрах» № 0471-2026.", "38000.00",
+        Spec("Страхование оборудования", "Полис на серверное и сетевое оборудование в ЦОД.", "180000.00",
              Currency.RUB, Period.QUARTERLY, _back(t + days(38), Period.QUARTERLY, 2),
              paid_shifted(-2, [anna], before=t)),
-        Spec("Домен invoicekeeper.ru", "Продление у регистратора REG.RU.", "1500.00",
+        Spec("Домены aeza.ru и aeza.net", "Продление у регистратора.", "2900.00",
              Currency.RUB, Period.YEARLY, t + days(20)),
-        Spec("Сервер DigitalOcean", "Droplet 4 vCPU / 8 GB, продакшен.", "20.00",
+        Spec("IP-транзит, канал 10 Гбит/с", "Магистральный канал связи для ЦОД в Москве.", "2400.00",
              Currency.USD, Period.MONTHLY, _back(t - days(10), Period.MONTHLY, 3),
              paid_shifted(0, [maria], before=t - days(10))),
-        Spec("Sentry Team", "Мониторинг ошибок, 50 тыс. событий.", "26.00",
+        Spec("Лицензии cPanel", "Панели управления для тарифов виртуального хостинга, 30 серверов.", "690.00",
              Currency.USD, Period.MONTHLY, _back(t - days(6), Period.MONTHLY, 3),
              paid_shifted(-1, [maria], before=t - days(6))),
-        Spec("GitHub Team", "11 мест, организация kefcoders.", "44.00",
+        Spec("Мониторинг сети и серверов", "Внешняя проверка доступности узлов и оповещения дежурным.", "320.00",
              Currency.USD, Period.MONTHLY, _back(t - days(2), Period.MONTHLY, 3), paid_shifted(0, [maria])),
-        Spec("AWS", "S3 и CloudFront для файлов клиентов.", "134.20",
+        Spec("Аренда блока IPv4-адресов /24", "256 адресов под новые выделенные серверы клиентов.", "1900.00",
              Currency.USD, Period.MONTHLY, t + days(4), created_on=t - days(1)),
-        Spec("JetBrains All Products", "Лицензия на команду, 3 места.", "28.90",
+        Spec("Колокация, Франкфурт", "Две стойки и кросс-подключения в европейском ЦОД.", "2900.00",
              Currency.EUR, Period.MONTHLY, _back(t - days(19), Period.MONTHLY, 3), paid_shifted(0, [anna])),
-        Spec("Figma Professional", "Оплата 31-го; в коротких месяцах — в последний день.", "15.00",
-             Currency.EUR, Period.MONTHLY, _latest_31st(t), figma),
-        Spec("Хостинг Timeweb", "Старый сервер, переехали на DigitalOcean.", "1290.00",
+        Spec("Аренда стойки, Амстердам", "Оплата 31-го; в коротких месяцах — в последний день.", "3100.00",
+             Currency.EUR, Period.MONTHLY, _latest_31st(t), amsterdam),
+        Spec("Резервный канал связи", "Отключён после запуска второго канала 10 Гбит/с.", "85000.00",
              Currency.RUB, Period.MONTHLY, _back(t - days(75), Period.MONTHLY, 4), paid_shifted(0, [anna]),
              stopped_on=t - days(70)),
     ]  # fmt: skip
