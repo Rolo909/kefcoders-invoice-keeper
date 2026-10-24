@@ -54,7 +54,7 @@ async def test_demo_users_can_log_in(db_session: AsyncSession) -> None:
 
 @pytest.mark.usefixtures("seeded")
 async def test_rent_in_rubles_is_due_in_two_days(db_session: AsyncSession) -> None:
-    rent = await periods_of(db_session, "Аренда офиса")
+    rent = await periods_of(db_session, "Аренда офиса, Санкт-Петербург")
 
     upcoming = [p for p in rent if p.paid_date is None]
     assert upcoming[0].due_date == TODAY + timedelta(days=2)
@@ -65,7 +65,7 @@ async def test_rent_in_rubles_is_due_in_two_days(db_session: AsyncSession) -> No
 
 @pytest.mark.usefixtures("seeded")
 async def test_server_in_dollars_is_overdue(db_session: AsyncSession) -> None:
-    server = await periods_of(db_session, "Сервер DigitalOcean")
+    server = await periods_of(db_session, "IP-транзит, канал 10 Гбит/с")
 
     overdue = [p for p, s in zip(server, states(server), strict=True) if s is OccurrenceState.OVERDUE]
     assert [p.due_date for p in overdue] == [TODAY - timedelta(days=10)]
@@ -74,7 +74,7 @@ async def test_server_in_dollars_is_overdue(db_session: AsyncSession) -> None:
 
 @pytest.mark.usefixtures("seeded")
 async def test_subscription_in_euro_shows_last_day_rule_and_late_payment(db_session: AsyncSession) -> None:
-    figma = await periods_of(db_session, "Figma Professional")
+    figma = await periods_of(db_session, "Аренда стойки, Амстердам")
 
     assert figma[0].due_date == date(2026, 7, 31)
     assert [p.due_date for p in figma[1:4]] == [date(2026, 8, 31), date(2026, 9, 30), date(2026, 10, 31)]
@@ -84,11 +84,11 @@ async def test_subscription_in_euro_shows_last_day_rule_and_late_payment(db_sess
 
 @pytest.mark.usefixtures("seeded")
 async def test_stopped_payment_keeps_its_history(db_session: AsyncSession) -> None:
-    hosting = await db_session.scalar(select(RecurringPayment).where(RecurringPayment.name == "Хостинг Timeweb"))
+    hosting = await db_session.scalar(select(RecurringPayment).where(RecurringPayment.name == "Резервный канал связи"))
 
     assert hosting is not None
     assert hosting.deleted_at is not None
-    assert all(p.paid_date is not None for p in await periods_of(db_session, "Хостинг Timeweb"))
+    assert all(p.paid_date is not None for p in await periods_of(db_session, "Резервный канал связи"))
 
 
 @pytest.mark.usefixtures("seeded")
