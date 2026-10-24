@@ -122,7 +122,7 @@ export function SummaryPage() {
             const planned = Number(t.planned);
             return (
               <tr key={t.currency}>
-                <td><span className="serif" style={{ fontWeight: 700, fontSize: 19 }}>{t.currency}</span><span className="name-sub">{CURRENCY_NAME[t.currency]}</span></td>
+                <td><span className="display" style={{ fontWeight: 800, fontSize: 19 }}>{t.currency}</span><span className="name-sub">{CURRENCY_NAME[t.currency]}</span></td>
                 <td className="sum">{num(planned)}</td>
                 <td className="sum">{num(paid)}</td>
                 <td className="sum strong">{num(t.unpaid)}</td>

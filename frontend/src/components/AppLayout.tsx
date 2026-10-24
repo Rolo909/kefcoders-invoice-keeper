@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/context';
 import { Bell } from './Bell';
 import { useDialogs } from './dialogs/context';
+import { Logo } from './Logo';
 
 const MAIN = [
   { to: '/', label: 'Сводка', end: true },
@@ -29,7 +30,7 @@ export function AppLayout() {
       <a className="skip" href="#main">Перейти к содержимому</a>
       <header className="mast">
         <div className="mast-row">
-          <Link className="brand" to="/">Invoice Keeper</Link>
+          <Link className="brand" to="/"><Logo /></Link>
           <Bell />
           <NavLink className={({ isActive }) => `who${isActive ? ' active' : ''}`} to="/settings" aria-label={`${user?.full_name ?? user?.login}, профиль`}>
             <b>{user?.full_name ?? user?.login}</b>
