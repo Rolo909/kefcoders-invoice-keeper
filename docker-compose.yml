@@ -32,6 +32,20 @@ services:
     ports:
       - "8000:8000"
 
+  # Проверяет сроки и отправляет напоминания. Тот же образ, что и backend; стартует после миграций.
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "app.worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
   frontend:
     build: ./frontend
     restart: unless-stopped

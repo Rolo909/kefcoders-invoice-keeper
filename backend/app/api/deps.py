@@ -11,6 +11,7 @@ from app.domain.status import today_in
 from app.errors import forbidden, unauthorized
 from app.models import User
 from app.services.auth import AuthContext, LoginRateLimiter, resolve_session
+from app.services.reminders import ReminderDispatcher
 
 SESSION_COOKIE = "ik_session"
 
@@ -36,6 +37,14 @@ def session_ttl(settings: Settings) -> timedelta:
 
 def client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+def get_reminders(request: Request) -> ReminderDispatcher:
+    dispatcher: ReminderDispatcher = request.app.state.reminders
+    return dispatcher
+
+
+RemindersDep = Annotated[ReminderDispatcher, Depends(get_reminders)]
 
 
 def get_login_limiter(request: Request) -> LoginRateLimiter:

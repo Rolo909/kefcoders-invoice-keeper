@@ -10,7 +10,9 @@ os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
 
 import asyncio
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from alembic import command
@@ -21,10 +23,12 @@ from sqlalchemy import make_url, pool, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.db import get_session
-from app.domain.enums import Role
+from app.domain.enums import NotificationChannel, Role
 from app.main import create_app
 from app.models import User
 from app.security import hash_password
+from app.services.notifiers.base import Reminder, SendResult
+from app.services.reminders import ReminderDispatcher
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
@@ -110,14 +114,47 @@ async def regular_user(db_session: AsyncSession, password_hashes: dict[str, str]
     return user
 
 
+class RecordingNotifier:
+    """Вместо Telegram: запоминает отправленные напоминания, умеет имитировать сбой."""
+
+    channel = NotificationChannel.TELEGRAM
+
+    def __init__(self) -> None:
+        self.sent: list[Reminder] = []
+        self.failure: SendResult | None = None
+
+    async def send(self, reminder: Reminder) -> SendResult:
+        if self.failure is not None:
+            return self.failure
+        self.sent.append(reminder)
+        return SendResult(ok=True, telegram_message_id=len(self.sent))
+
+
 @pytest.fixture
-async def api(app: FastAPI, db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+def notifier() -> RecordingNotifier:
+    return RecordingNotifier()
+
+
+@pytest.fixture
+def reminders(db_session: AsyncSession, notifier: RecordingNotifier) -> ReminderDispatcher:
+    """Диспетчер напоминаний, работающий в транзакции теста."""
+
+    @asynccontextmanager
+    async def test_session() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    return ReminderDispatcher(test_session, [notifier], remind_days_before=3, timezone=ZoneInfo("Europe/Moscow"))
+
+
+@pytest.fixture
+async def api(app: FastAPI, db_session: AsyncSession, reminders: ReminderDispatcher) -> AsyncIterator[AsyncClient]:
     """Клиент API, все запросы которого идут в транзакцию теста (откатывается после теста)."""
 
     async def override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_session] = override
+    app.state.reminders = reminders
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
 

@@ -62,3 +62,7 @@ known-third-party = ["alembic"]  # иначе папка alembic/ рядом п�
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true  # APScheduler 3 без аннотаций типов

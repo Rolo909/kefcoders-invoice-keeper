@@ -30,6 +30,8 @@ class Notification(UuidPkMixin, CreatedAtMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Когда отправку забрал процесс: зависшая «pending»-запись (процесс упал) забирается повторно.
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class NotificationRead(Base):

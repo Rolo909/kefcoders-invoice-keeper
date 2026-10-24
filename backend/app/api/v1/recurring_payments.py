@@ -1,9 +1,9 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Query, Request, status
 
-from app.api.deps import AdminUser, SettingsDep, TodayDep, client_ip, utc_now
+from app.api.deps import AdminUser, RemindersDep, SettingsDep, TodayDep, client_ip, utc_now
 from app.api.v1.presenters import payment_detail_out, payment_out
 from app.db import SessionDep
 from app.domain.enums import Currency
@@ -42,6 +42,7 @@ async def list_payments(
     response_model=RecurringPaymentOut,
     status_code=status.HTTP_201_CREATED,
     summary="Создание регулярного платежа",
+    description="Если срок ближе, чем за REMIND_DAYS_BEFORE дней, напоминание уходит сразу.",
 )
 async def create_payment(
     body: RecurringPaymentCreate,
@@ -50,6 +51,8 @@ async def create_payment(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    reminders: RemindersDep,
+    background: BackgroundTasks,
 ) -> RecurringPaymentOut:
     payment = await payments_service.create_payment(
         session,
@@ -59,6 +62,8 @@ async def create_payment(
         horizon_days=settings.occurrence_horizon_days,
         ip=client_ip(request),
     )
+    # Платёж добавили позже, чем за N дней до срока, — напоминание сразу, не дожидаясь проверки worker'а.
+    background.add_task(reminders.run, payment_id=payment.id)
     view, _ = await payments_service.get_payment(session, payment.id, today=today)
     return payment_out(view, today=today, remind_days_before=settings.remind_days_before)
 

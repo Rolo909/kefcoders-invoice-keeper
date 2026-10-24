@@ -11,7 +11,7 @@ import time_machine
 from httpx import AsyncClient, Response
 
 from app.models import User
-from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
+from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, RecordingNotifier, bearer, login
 
 TODAY = date(2026, 10, 15)
 MSK = ZoneInfo("Europe/Moscow")
@@ -395,3 +395,27 @@ async def test_list_is_paginated(api: AsyncClient, admin_token: str) -> None:
     body = response.json()
     assert (len(body["items"]), body["limit"], body["offset"]) == (2, 2, 1)
     assert body["total"] > 3
+
+
+# ---------- напоминание сразу при создании ----------
+
+
+async def test_payment_added_less_than_three_days_before_due_is_reminded_at_once(
+    api: AsyncClient, admin_token: str, notifier: RecordingNotifier
+) -> None:
+    payment = await create_payment(api, admin_token, next_due_date="2026-10-16")
+
+    assert [(r.payment_name, r.due_date.isoformat()) for r in notifier.sent] == [("Аренда офиса", "2026-10-16")]
+    detail = (
+        await api.get(f"/api/v1/payment-occurrences/{payment['next_occurrence']['id']}", headers=bearer(admin_token))
+    ).json()
+    assert [(r["channel"], r["kind"], r["status"]) for r in detail["reminders"]] == [("telegram", "before_due", "sent")]
+    assert detail["last_reminder_at"] is not None
+
+
+async def test_payment_far_from_due_date_is_not_reminded_yet(
+    api: AsyncClient, admin_token: str, notifier: RecordingNotifier
+) -> None:
+    await create_payment(api, admin_token, next_due_date="2026-10-25")
+
+    assert notifier.sent == []

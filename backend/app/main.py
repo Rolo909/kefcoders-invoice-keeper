@@ -7,9 +7,10 @@ from fastapi import FastAPI
 from app.api.v1 import API_PREFIX
 from app.api.v1 import router as api_v1_router
 from app.config import get_settings
-from app.db import engine
+from app.db import engine, session_factory
 from app.errors import register_error_handlers
 from app.services.auth import LoginRateLimiter
+from app.services.reminders import ReminderDispatcher, build_notifiers
 
 
 @asynccontextmanager
@@ -32,6 +33,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.login_limiter = LoginRateLimiter()
+    app.state.reminders = ReminderDispatcher(
+        session_factory,
+        build_notifiers(settings),
+        remind_days_before=settings.remind_days_before,
+        timezone=settings.timezone,
+    )
     register_error_handlers(app)
     app.include_router(api_v1_router)
     return app
