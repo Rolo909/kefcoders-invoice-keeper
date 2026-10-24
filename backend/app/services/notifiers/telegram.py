@@ -6,13 +6,14 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.domain.enums import NotificationChannel
-from app.services.notifiers.base import Reminder, SendResult
+from app.services.notifiers.base import Reminder, SendResult, TeamTarget
 from app.services.notifiers.formatting import reminder_text_html
 from app.services.telegram import pay_callback_data
 
 TELEGRAM_API = "https://api.telegram.org"
 SEND_TIMEOUT_SECONDS = 10
 NOT_CONFIGURED = "Telegram не настроен: задайте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env"
+NO_CHAT = "У команды «{team}» не задан Telegram-чат, и общего TELEGRAM_CHAT_ID в .env нет"
 CHECK_TEXT = "✅ Проверка связи: Invoice Keeper пишет в этот чат напоминания об оплате."
 
 logger = logging.getLogger(__name__)
@@ -69,18 +70,26 @@ class TelegramNotifier:
         body: dict[str, Any] = response.json()
         return body
 
+    def chat_for(self, team: TeamTarget | None) -> str | None:
+        """Чат команды, а если он не задан — общий TELEGRAM_CHAT_ID из .env."""
+        return (team.telegram_chat_id if team else None) or self._chat_id
+
     async def send(self, reminder: Reminder) -> SendResult:
         return await self._send_message(
-            {"text": reminder_text_html(reminder), "reply_markup": reminder_keyboard(reminder, self._panel_url)}
+            reminder.team,
+            {"text": reminder_text_html(reminder), "reply_markup": reminder_keyboard(reminder, self._panel_url)},
         )
 
-    async def check(self) -> SendResult:
-        return await self._send_message({"text": CHECK_TEXT})
+    async def check(self, team: TeamTarget | None = None) -> SendResult:
+        return await self._send_message(team, {"text": CHECK_TEXT})
 
-    async def _send_message(self, content: dict[str, Any]) -> SendResult:
-        if not self._token or not self._chat_id:
-            return SendResult(ok=False, error=NOT_CONFIGURED, attempted=False)
-        payload = {"chat_id": self._chat_id, "parse_mode": "HTML", "disable_web_page_preview": True, **content}
+    async def _send_message(self, team: TeamTarget | None, content: dict[str, Any]) -> SendResult:
+        chat_id = self.chat_for(team)
+        if not self._token or chat_id is None:
+            # Попытка не считается: как только токен или чат зададут, напоминание уйдёт.
+            error = NO_CHAT.format(team=team.name) if self._token and team else NOT_CONFIGURED
+            return SendResult(ok=False, error=error, attempted=False)
+        payload = {"chat_id": chat_id, "parse_mode": "HTML", "disable_web_page_preview": True, **content}
         try:
             body = await self._call("sendMessage", payload)
         except (httpx.HTTPError, ValueError) as exc:  # сеть, таймаут или не-JSON ответ

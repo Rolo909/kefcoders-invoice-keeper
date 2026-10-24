@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import AttachmentKind, NotificationChannel, NotificationKind, NotificationStatus, Role
 from app.models import Attachment, AuditLog, Notification, PaymentOccurrence, RecurringPayment, Team, User
-from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
+from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, RecordingNotifier, bearer, login
 
 MSK = ZoneInfo("Europe/Moscow")
 TODAY = "2026-10-15"
@@ -506,3 +506,61 @@ async def test_occurrence_team_moves_nothing_when_user_changes_team(
     assert stored is not None
     assert (stored.team_id, stored.paid_by) == (world.kef.id, anna.id)  # прошлая отметка осталась за Kefcoders
     assert (await get(api, world.anna, f"/payment-occurrences/{period['id']}")).status_code == 404
+
+
+# ---------- общий платёж: прекращение, календарь, напоминания новой команды ----------
+
+
+async def test_stopping_shared_payment_stops_it_for_every_team(api: AsyncClient, world: World) -> None:
+    stopped = await api.delete(f"/api/v1/recurring-payments/{world.shared['id']}", headers=bearer(world.admin))
+
+    periods = await items(api, world.admin, "/payment-occurrences", recurring_payment_id=world.shared["id"])
+    assert stopped.status_code == 204
+    assert periods == []  # будущие неоплаченные периоды убраны у всех команд
+
+
+async def test_calendar_plans_shared_payment_for_each_team(api: AsyncClient, world: World) -> None:
+    far = (await get(api, world.admin, "/payments/calendar", month="2027-03")).json()
+    mine = (await get(api, world.anna, "/payments/calendar", month="2027-03")).json()
+
+    def planned(body: dict[str, Any]) -> list[tuple[str, str]]:
+        return sorted((p["name"], p["team"]["name"]) for day in body["days"] for p in day["planned"])
+
+    assert planned(far) == [
+        ("Adobe Creative Cloud", "Студия дизайна"),
+        ("Аренда офиса", "Kefcoders"),
+        ("Бухгалтерское сопровождение", "Kefcoders"),
+        ("Бухгалтерское сопровождение", "Студия дизайна"),
+    ]
+    assert planned(mine) == [("Аренда офиса", "Kefcoders"), ("Бухгалтерское сопровождение", "Kefcoders")]
+
+
+async def test_new_team_is_reminded_at_once_about_near_shared_due(
+    api: AsyncClient, world: World, notifier: RecordingNotifier
+) -> None:
+    await _payment(api, world.admin, "Яндекс 360", None, next_due_date="2026-10-17")
+    notifier.sent.clear()
+
+    await api.post("/api/v1/teams", json={"name": "Отдел продаж"}, headers=bearer(world.admin))
+
+    assert [(r.payment_name, r.team.name) for r in notifier.sent] == [("Яндекс 360", "Отдел продаж")]
+
+
+async def test_channel_check_for_a_team_uses_its_chat(
+    api: AsyncClient, world: World, notifier: RecordingNotifier, db_session: AsyncSession
+) -> None:
+    world.studio.telegram_chat_id = "-1001234567890"
+    await db_session.flush()
+
+    checked = await api.post(
+        "/api/v1/notifications/test", params={"team_id": str(world.studio.id)}, headers=bearer(world.admin)
+    )
+    unknown = await api.post(
+        "/api/v1/notifications/test", params={"team_id": str(uuid.uuid4())}, headers=bearer(world.admin)
+    )
+
+    assert checked.status_code == 200
+    assert [(t.name, t.telegram_chat_id) if t else None for t in notifier.checked] == [
+        ("Студия дизайна", "-1001234567890")
+    ]
+    assert unknown.status_code == 404

@@ -19,12 +19,13 @@ from app.domain.enums import Currency, OccurrenceStatus, Period, Role
 from app.errors import AppError
 from app.models import AuditLog, PaymentOccurrence, RecurringPayment, Team, User
 from app.services.occurrences import update_occurrence
-from app.services.telegram import PayResult, mark_paid_from_telegram
+from app.services.telegram import PayResult, PressedIn, mark_paid_from_telegram
 from tests.conftest import TEST_DATABASE_URL
 
 TODAY = date(2026, 10, 24)
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 TG_ANNA, TG_MARIA = 777_001, 777_002
+CHAT = -1009990001  # общий чат: у команды теста своего нет
 
 
 @dataclass(frozen=True)
@@ -162,7 +163,13 @@ async def test_bot_second_press_waits_and_gets_already_paid(world: World) -> Non
     async def maria_presses() -> tuple[PayResult, uuid.UUID | None]:
         async with world.sessions() as s:
             outcome = await mark_paid_from_telegram(
-                s, world.occurrence_id, telegram_user_id=TG_MARIA, today=TODAY + timedelta(days=1), now=NOW
+                s,
+                world.occurrence_id,
+                telegram_user_id=TG_MARIA,
+                pressed_in=PressedIn(CHAT),
+                fallback_chat_id=str(CHAT),
+                today=TODAY + timedelta(days=1),
+                now=NOW,
             )
             return outcome.result, outcome.paid_by.id if outcome.paid_by else None
 
@@ -180,7 +187,13 @@ async def test_two_simultaneous_bot_presses_record_exactly_one_payment(world: Wo
     async def press(telegram_id: int) -> PayResult:
         async with world.sessions() as s:
             outcome = await mark_paid_from_telegram(
-                s, world.occurrence_id, telegram_user_id=telegram_id, today=TODAY, now=NOW
+                s,
+                world.occurrence_id,
+                telegram_user_id=telegram_id,
+                pressed_in=PressedIn(CHAT),
+                fallback_chat_id=str(CHAT),
+                today=TODAY,
+                now=NOW,
             )
             return outcome.result
 

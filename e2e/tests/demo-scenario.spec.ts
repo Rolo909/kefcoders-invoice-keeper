@@ -3,7 +3,7 @@
  * Данные для особых случаев готовятся через API, действия выполняются кликами.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { ADMIN, ANNA, apiAs, loginUi, ru, serverDay, uniqueName } from './helpers';
+import { ADMIN, ANNA, apiAs, loginUi, ru, serverDay, teamIdOf, uniqueName } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -101,7 +101,10 @@ test('6. исправление фактической даты убирает �
   const admin = await apiAs(request, ADMIN);
   const name = uniqueName('E2E Подписка');
   const due = await serverDay(admin, -10);
-  const created = await admin.post('/recurring-payments', { name, amount: '15', currency: 'EUR', next_due_date: due });
+  // Платёж команды Анны: у общего было бы по периоду на каждую команду.
+  const created = await admin.post('/recurring-payments', {
+    name, amount: '15', currency: 'EUR', next_due_date: due, team_id: await teamIdOf(request, ANNA),
+  });
   const lateDate = await serverDay(admin, -7);
   const late = await admin.patch(`/payment-occurrences/${created.next_occurrence.id}`, { status: 'paid', paid_date: lateDate });
   expect(late.state).toBe('paid_late');

@@ -54,3 +54,9 @@ export async function serverDay(api: Api, shiftDays = 0) {
 export const ru = (iso: string) => iso.split('-').reverse().join('.');
 
 export const uniqueName = (prefix: string) => `${prefix} ${Date.now().toString(36)}`;
+
+/** Команда пользователя: платёж для неё виден и оплачивается только её участниками. */
+export async function teamIdOf(request: APIRequestContext, account: Account) {
+  const { user } = await (await apiAs(request, account)).get('/auth/me');
+  return user.team.id as string;
+}

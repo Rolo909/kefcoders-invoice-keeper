@@ -30,7 +30,7 @@ from app.domain.enums import NotificationChannel, Role
 from app.main import create_app
 from app.models import Team, User
 from app.security import hash_password
-from app.services.notifiers.base import Reminder, SendResult
+from app.services.notifiers.base import Reminder, SendResult, TeamTarget
 from app.services.reminders import ReminderDispatcher
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
@@ -142,6 +142,7 @@ class RecordingNotifier:
 
     def __init__(self) -> None:
         self.sent: list[Reminder] = []
+        self.checked: list[TeamTarget | None] = []
         self.failure: SendResult | None = None
 
     async def send(self, reminder: Reminder) -> SendResult:
@@ -150,7 +151,8 @@ class RecordingNotifier:
         self.sent.append(reminder)
         return SendResult(ok=True, telegram_message_id=len(self.sent))
 
-    async def check(self) -> SendResult:
+    async def check(self, team: TeamTarget | None = None) -> SendResult:
+        self.checked.append(team)
         return self.failure or SendResult(ok=True)
 
 

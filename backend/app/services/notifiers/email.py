@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.db import SessionFactory
 from app.domain.enums import NotificationChannel, NotificationKind
 from app.models import User
-from app.services.notifiers.base import Reminder, SendResult
+from app.services.notifiers.base import Reminder, SendResult, TeamTarget
 from app.services.notifiers.formatting import format_date, format_money, reminder_text_html
 
 SEND_TIMEOUT_SECONDS = 10
@@ -58,22 +58,26 @@ class EmailNotifier:
         self._start_tls = start_tls
         self._extra = extra_recipients or []
 
-    async def recipients(self) -> list[str]:
+    async def recipients(self, team: TeamTarget | None = None) -> list[str]:
+        """Включившие письма участники команды (или все, если команда не указана) и адреса из .env."""
+        conditions = [User.notify_email, User.email.is_not(None)]
+        if team is not None:
+            conditions.append(User.team_id == team.id)
         async with self._session_factory() as session:
-            emails = await session.scalars(select(User.email).where(User.notify_email, User.email.is_not(None)))
+            emails = await session.scalars(select(User.email).where(*conditions))
             found = [e for e in emails if e]
         return list(dict.fromkeys([*found, *self._extra]))
 
     async def send(self, reminder: Reminder) -> SendResult:
         html = reminder_text_html(reminder)
-        return await self._send(subject(reminder), _plain(html), html.replace("\n", "<br>"))
+        return await self._send(reminder.team, subject(reminder), _plain(html), html.replace("\n", "<br>"))
 
-    async def check(self) -> SendResult:
+    async def check(self, team: TeamTarget | None = None) -> SendResult:
         text = "Проверка связи: Invoice Keeper присылает на этот адрес напоминания об оплате."
-        return await self._send("Invoice Keeper: проверка почты", text, text)
+        return await self._send(team, "Invoice Keeper: проверка почты", text, text)
 
-    async def _send(self, title: str, text: str, html: str) -> SendResult:
-        recipients = await self.recipients()
+    async def _send(self, team: TeamTarget | None, title: str, text: str, html: str) -> SendResult:
+        recipients = await self.recipients(team)
         if not recipients:
             return SendResult(ok=False, error=NO_RECIPIENTS, attempted=False)
         message = EmailMessage()

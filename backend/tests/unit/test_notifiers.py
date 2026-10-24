@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.domain.enums import Currency, NotificationKind
-from app.services.notifiers.base import Reminder
+from app.services.notifiers.base import Reminder, TeamTarget
 from app.services.notifiers.formatting import format_money, plural_days, reminder_text_html
 from app.services.notifiers.telegram import TelegramNotifier, public_panel_url
 
@@ -17,6 +17,7 @@ TOKEN = "123456:SECRET-TOKEN"
 def reminder(**overrides: object) -> Reminder:
     values: dict[str, object] = {
         "occurrence_id": uuid.uuid4(),
+        "team": TeamTarget(id=uuid.uuid4(), name="Kefcoders", telegram_chat_id=None),
         "kind": NotificationKind.BEFORE_DUE,
         "payment_name": "Аренда офиса",
         "amount": Decimal("50000.00"),
@@ -126,7 +127,7 @@ async def test_missing_settings_do_not_count_as_attempt(token: str | None, chat:
 
     assert (result.ok, result.attempted) == (False, False)
     assert result.error is not None
-    assert "TELEGRAM_BOT_TOKEN" in result.error
+    assert "TELEGRAM_BOT_TOKEN" in result.error or "не задан Telegram-чат" in result.error
 
 
 async def test_reminder_has_paid_button_for_this_period() -> None:

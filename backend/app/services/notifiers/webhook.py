@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from app.domain.enums import NotificationChannel
-from app.services.notifiers.base import Reminder, SendResult
+from app.services.notifiers.base import Reminder, SendResult, TeamTarget
 
 SEND_TIMEOUT_SECONDS = 5
 SIGNATURE_HEADER = "X-InvoiceKeeper-Signature"
@@ -46,10 +46,11 @@ class WebhookNotifier:
                     "currency": reminder.currency.value,
                 },
                 "payment": {"name": reminder.payment_name},
+                "team": {"id": str(reminder.team.id), "name": reminder.team.name},
             },
         )
 
-    async def check(self) -> SendResult:
+    async def check(self, team: TeamTarget | None = None) -> SendResult:
         return await self._post("test", {})
 
     async def _post(self, event: str, data: dict[str, Any]) -> SendResult:

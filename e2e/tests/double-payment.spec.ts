@@ -3,7 +3,7 @@
  * и должен увидеть, кто и когда уже оплатил.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { ADMIN, ANNA, apiAs, loginUi, ru, serverDay, uniqueName } from './helpers';
+import { ADMIN, ANNA, apiAs, loginUi, ru, serverDay, teamIdOf, uniqueName } from './helpers';
 
 async function openMarkDialog(browser: Browser, account: typeof ADMIN, payment: string, due: string): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
@@ -21,7 +21,7 @@ test('второй плательщик видит «уже оплачено», 
   const due = await serverDay(admin, 5);
   const today = await serverDay(admin);
   const payment = await admin.post('/recurring-payments', {
-    name, amount: '1500', currency: 'RUB', period: 'monthly', next_due_date: due,
+    name, amount: '1500', currency: 'RUB', period: 'monthly', next_due_date: due, team_id: await teamIdOf(request, ANNA),
   });
 
   const annaPage = await openMarkDialog(browser, ANNA, name, due);

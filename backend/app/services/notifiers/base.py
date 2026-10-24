@@ -8,10 +8,20 @@ from app.domain.enums import Currency, NotificationChannel, NotificationKind
 
 
 @dataclass(frozen=True)
+class TeamTarget:
+    """Команда, которой адресовано сообщение: её чат, её участники."""
+
+    id: uuid.UUID
+    name: str
+    telegram_chat_id: str | None  # None — общий чат TELEGRAM_CHAT_ID из .env
+
+
+@dataclass(frozen=True)
 class Reminder:
-    """Что сообщить: название, сумма, валюта и дата оплаты (требование кейса к напоминанию)."""
+    """Что сообщить: название, сумма, валюта и дата оплаты (требование кейса к напоминанию) — и какой команде."""
 
     occurrence_id: uuid.UUID
+    team: TeamTarget
     kind: NotificationKind
     payment_name: str
     amount: Decimal
@@ -34,6 +44,6 @@ class Notifier(Protocol):
 
     async def send(self, reminder: Reminder) -> SendResult: ...
 
-    async def check(self) -> SendResult:
-        """Проверочное сообщение — кнопка «Тестовое сообщение» в журнале панели."""
+    async def check(self, team: TeamTarget | None = None) -> SendResult:
+        """Проверочное сообщение — кнопка «Тестовое сообщение» в журнале панели; team — проверить канал команды."""
         ...

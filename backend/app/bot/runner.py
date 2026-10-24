@@ -14,11 +14,15 @@ logger = logging.getLogger(__name__)
 COMMANDS = [
     BotCommand(command="start", description="Что умеет бот"),
     BotCommand(command="link", description="Привязать аккаунт панели: /link <код>"),
+    BotCommand(command="chatid", description="ID этого чата — для настройки команды в панели"),
 ]
 
 
-def build_dispatcher(session_factory: SessionFactory, timezone: ZoneInfo) -> Dispatcher:
-    dispatcher = Dispatcher(session_factory=session_factory, timezone=timezone)
+def build_dispatcher(
+    session_factory: SessionFactory, timezone: ZoneInfo, fallback_chat_id: str | None = None
+) -> Dispatcher:
+    """fallback_chat_id — TELEGRAM_CHAT_ID: в него идут напоминания команд без своего чата."""
+    dispatcher = Dispatcher(session_factory=session_factory, timezone=timezone, fallback_chat_id=fallback_chat_id)
     dispatcher.include_router(build_router())
     return dispatcher
 

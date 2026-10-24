@@ -980,6 +980,20 @@ paths:
       - logs
       summary: Тестовое сообщение во все каналы — проверка настроек (администратор)
       operationId: test_notifications_api_v1_notifications_test_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: team_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Проверить чат и почту этой команды; без него — общий чат из .env
+          title: Team Id
+        description: Проверить чат и почту этой команды; без него — общий чат из .env
       responses:
         '200':
           description: Successful Response
@@ -987,8 +1001,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationTestOut'
-      security:
-      - HTTPBearer: []
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/inbox:
     get:
       tags:

@@ -23,6 +23,7 @@ from app.services.occurrences import ensure_occurrences
 from app.services.telegram import (
     LinkResult,
     PayResult,
+    PressedIn,
     create_link_code,
     link_account,
     mark_paid_from_telegram,
@@ -34,10 +35,13 @@ NOW = datetime(2026, 10, 24, 9, 0, tzinfo=UTC)
 TODAY = date(2026, 10, 24)
 TG_ANNA = 555_001
 TG_STRANGER = 555_999
+TEAM_CHAT = -1001234567890  # чат команды Kefcoders
+IN_TEAM_CHAT = PressedIn(TEAM_CHAT)
 
 
 @pytest.fixture
 async def period(db_session: AsyncSession, admin: User, team: Team) -> PaymentOccurrence:
+    team.telegram_chat_id = str(TEAM_CHAT)
     payment = RecurringPayment(
         name="Аренда офиса",
         amount=Decimal("50000.00"),
@@ -132,7 +136,15 @@ async def test_link_code_endpoint_and_telegram_linked_flag(api: AsyncClient, reg
 async def test_button_marks_period_paid_by_linked_user(
     db_session: AsyncSession, linked_user: User, period: PaymentOccurrence
 ) -> None:
-    outcome = await mark_paid_from_telegram(db_session, period.id, telegram_user_id=TG_ANNA, today=TODAY, now=NOW)
+    outcome = await mark_paid_from_telegram(
+        db_session,
+        period.id,
+        telegram_user_id=TG_ANNA,
+        pressed_in=IN_TEAM_CHAT,
+        fallback_chat_id=None,
+        today=TODAY,
+        now=NOW,
+    )
 
     assert (outcome.result, outcome.paid_date) == (PayResult.PAID, TODAY)
     assert (period.status, period.paid_date, period.paid_by) == (OccurrenceStatus.PAID, TODAY, linked_user.id)
@@ -148,24 +160,54 @@ async def test_button_marks_period_paid_by_linked_user(
 async def test_second_press_keeps_original_payment_date(
     db_session: AsyncSession, linked_user: User, period: PaymentOccurrence
 ) -> None:
-    await mark_paid_from_telegram(db_session, period.id, telegram_user_id=TG_ANNA, today=TODAY, now=NOW)
+    await mark_paid_from_telegram(
+        db_session,
+        period.id,
+        telegram_user_id=TG_ANNA,
+        pressed_in=IN_TEAM_CHAT,
+        fallback_chat_id=None,
+        today=TODAY,
+        now=NOW,
+    )
 
     outcome = await mark_paid_from_telegram(
-        db_session, period.id, telegram_user_id=TG_ANNA, today=TODAY + timedelta(days=1), now=NOW
+        db_session,
+        period.id,
+        telegram_user_id=TG_ANNA,
+        pressed_in=IN_TEAM_CHAT,
+        fallback_chat_id=None,
+        today=TODAY + timedelta(days=1),
+        now=NOW,
     )
 
     assert (outcome.result, outcome.paid_date, period.paid_date) == (PayResult.ALREADY_PAID, TODAY, TODAY)
 
 
 async def test_unlinked_telegram_cannot_mark_payment(db_session: AsyncSession, period: PaymentOccurrence) -> None:
-    outcome = await mark_paid_from_telegram(db_session, period.id, telegram_user_id=TG_STRANGER, today=TODAY, now=NOW)
+    outcome = await mark_paid_from_telegram(
+        db_session,
+        period.id,
+        telegram_user_id=TG_STRANGER,
+        pressed_in=IN_TEAM_CHAT,
+        fallback_chat_id=None,
+        today=TODAY,
+        now=NOW,
+    )
 
     assert outcome.result is PayResult.NOT_LINKED
     assert period.status is OccurrenceStatus.UNPAID
 
 
 async def test_removed_period_is_reported(db_session: AsyncSession, linked_user: User) -> None:
-    outcome = await mark_paid_from_telegram(db_session, uuid.uuid4(), telegram_user_id=TG_ANNA, today=TODAY, now=NOW)
+    outcome = await mark_paid_from_telegram(
+        db_session,
+        uuid.uuid4(),
+        telegram_user_id=TG_ANNA,
+        pressed_in=IN_TEAM_CHAT,
+        fallback_chat_id=None,
+        today=TODAY,
+        now=NOW,
+    )
 
     assert outcome.result is PayResult.NOT_FOUND
 
@@ -173,9 +215,11 @@ async def test_removed_period_is_reported(db_session: AsyncSession, linked_user:
 # ---------- обработчики бота ----------
 
 
-def fake_message(*, chat_type: ChatType = ChatType.PRIVATE, user_id: int = TG_ANNA, html_text: str = "") -> MagicMock:
+def fake_message(
+    *, chat_type: ChatType = ChatType.PRIVATE, user_id: int = TG_ANNA, html_text: str = "", chat_id: int = TEAM_CHAT
+) -> MagicMock:
     message = MagicMock(spec=Message)
-    message.chat = SimpleNamespace(type=chat_type)
+    message.chat = SimpleNamespace(type=chat_type, id=chat_id, username=None)
     message.from_user = SimpleNamespace(id=user_id)
     message.html_text = html_text
     message.answer = AsyncMock()
@@ -237,7 +281,7 @@ async def test_pay_button_marks_paid_and_closes_message(
 ) -> None:
     callback = fake_callback(pay_callback_data(period.id), html_text="🔔 Напоминание об оплате\n<b>Аренда офиса</b>")
 
-    await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"))
+    await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"), None)
 
     callback.answer.assert_awaited_once_with("Отмечено как оплаченное")
     edited = callback.message.edit_text.call_args
@@ -250,7 +294,7 @@ async def test_pay_button_of_unlinked_user_shows_alert(
 ) -> None:
     callback = fake_callback(pay_callback_data(period.id), user_id=TG_STRANGER)
 
-    await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"))
+    await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"), None)
 
     callback.answer.assert_awaited_once_with(handlers.NOT_LINKED, show_alert=True)
     callback.message.edit_text.assert_not_awaited()
@@ -259,7 +303,7 @@ async def test_pay_button_of_unlinked_user_shows_alert(
 async def test_broken_button_data_is_handled(session_factory: SessionFactory) -> None:
     callback = fake_callback("pay:not-a-uuid")
 
-    await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"))
+    await handlers.pay(callback, session_factory, ZoneInfo("Europe/Moscow"), None)
 
     callback.answer.assert_awaited_once_with(handlers.STALE_BUTTON, show_alert=True)
 
@@ -272,8 +316,8 @@ async def test_second_member_sees_who_already_paid(
     first = fake_callback(pay_callback_data(period.id), user_id=TG_ANNA, html_text="🔔 <b>Аренда офиса</b>")
     second = fake_callback(pay_callback_data(period.id), user_id=TG_STRANGER, html_text="🔔 <b>Аренда офиса</b>")
 
-    await handlers.pay(first, session_factory, ZoneInfo("Europe/Moscow"))
-    await handlers.pay(second, session_factory, ZoneInfo("Europe/Moscow"))
+    await handlers.pay(first, session_factory, ZoneInfo("Europe/Moscow"), None)
+    await handlers.pay(second, session_factory, ZoneInfo("Europe/Moscow"), None)
 
     paid_on = period.paid_date.strftime("%d.%m.%Y")  # type: ignore[union-attr]
     second.answer.assert_awaited_once_with(

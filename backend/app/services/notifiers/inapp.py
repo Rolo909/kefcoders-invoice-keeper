@@ -1,5 +1,5 @@
 from app.domain.enums import NotificationChannel
-from app.services.notifiers.base import Reminder, SendResult
+from app.services.notifiers.base import Reminder, SendResult, TeamTarget
 
 
 class InAppNotifier:
@@ -13,5 +13,5 @@ class InAppNotifier:
     async def send(self, reminder: Reminder) -> SendResult:
         return SendResult(ok=True)
 
-    async def check(self) -> SendResult:
+    async def check(self, team: TeamTarget | None = None) -> SendResult:
         return SendResult(ok=True)
