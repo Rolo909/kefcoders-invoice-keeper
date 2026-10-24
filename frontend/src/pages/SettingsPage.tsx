@@ -42,12 +42,14 @@ export function SettingsPage() {
   return (
     <div className="prof">
       <div className="page-head"><h1>Профиль</h1></div>
-      <p className="lead">{user.full_name ?? user.login} · {user.login} · {user.role === 'admin' ? 'администратор' : 'пользователь'}</p>
+      <p className="lead">{user.full_name ?? user.login} · {user.login} · {user.role === 'admin' ? 'администратор' : 'пользователь'}{user.team ? ` · команда «${user.team.name}»` : ''}</p>
       {user.is_system && <p className="small muted" style={{ margin: '-8px 0 22px' }}>Учётная запись администратора задана в файле .env: логин и пароль меняются только там.</p>}
 
       <section className="block" aria-labelledby="tg-t">
         <h2 id="tg-t"><TelegramIcon />Telegram</h2>
-        <p className="muted">Напоминания приходят в общий чат команды. Привяжите свой аккаунт, чтобы отмечать оплату кнопкой «Оплачено» прямо в сообщении бота.</p>
+        <p className="muted">
+          {user.team ? `Напоминания приходят в чат команды «${user.team.name}».` : 'Напоминания каждой команды приходят в её чат.'} Привяжите свой аккаунт, чтобы отмечать оплату кнопкой «Оплачено» прямо в сообщении бота.
+        </p>
         {user.telegram_linked ? (
           <div><span className="stamp" style={{ transform: 'rotate(-2deg)' }}>Привязан</span></div>
         ) : (
@@ -73,7 +75,7 @@ export function SettingsPage() {
       <section className="block" aria-labelledby="em-t">
         <h2 id="em-t">Почта</h2>
         {user.is_system ? (
-          <p className="muted">Почта для напоминаний настраивается у пользователей. Администратор из .env получает уведомления в общем чате Telegram и в колокольчике панели.</p>
+          <p className="muted">Почта для напоминаний настраивается у пользователей. Администратор из .env видит уведомления всех команд в колокольчике панели.</p>
         ) : (
         <form onSubmit={saveEmail} noValidate style={{ display: "grid", gap: 14, maxWidth: 460 }}>
           <TextInput type="email" inputMode="email" autoComplete="email" label="Адрес для напоминаний" placeholder="name@kefcoders.ru" value={email}
