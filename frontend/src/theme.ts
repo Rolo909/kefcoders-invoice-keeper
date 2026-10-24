@@ -3,39 +3,39 @@ import {
   type MantineColorsTuple, type VariantColorsResolver,
 } from '@mantine/core';
 
-const stamp: MantineColorsTuple = ['#f0edfb', '#ddd7f4', '#b9aeea', '#9483e0', '#7562d6', '#604cc6', '#4b36b5', '#3f2d9b', '#33247f', '#271b63'];
+const aeza: MantineColorsTuple = ['#e6f8fe', '#ccf0fc', '#9fe2f9', '#6fd3f5', '#4cc6f1', '#2fb9ea', '#14a6d9', '#0b8bb8', '#0b6c96', '#084e6d'];
 
 const resolver: VariantColorsResolver = (input) => {
   const danger = input.color === 'red';
-  const tone = danger ? 'var(--red)' : 'var(--violet)';
-  const soft = danger ? 'var(--red-soft)' : 'var(--violet-soft)';
+  const tone = danger ? 'var(--red)' : 'var(--accent)';
+  const soft = danger ? 'var(--red-soft)' : 'var(--blue-soft)';
   switch (input.variant) {
     case 'filled':
-      return { background: tone, hover: danger ? 'var(--red)' : 'var(--violet-2)', color: danger ? 'var(--paper)' : 'var(--on-violet)', border: '1.5px solid transparent' };
+      return { background: tone, hover: danger ? 'var(--red)' : 'var(--accent-2)', color: danger ? 'var(--paper)' : 'var(--on-accent)', border: '1.5px solid transparent' };
     case 'outline':
       return { background: 'transparent', hover: soft, color: tone, border: `1.5px solid ${tone}` };
     case 'subtle':
       return { background: 'transparent', hover: danger ? soft : 'var(--paper-2)', color: danger ? tone : 'var(--ink)', border: '1.5px solid transparent' };
     case 'transparent':
-      return { background: 'transparent', hover: 'transparent', color: tone, border: '1.5px solid transparent' };
+      return { background: 'transparent', hover: 'transparent', color: danger ? tone : 'var(--blue-ink)', border: '1.5px solid transparent' };
     default:
       return defaultVariantColorsResolver(input);
   }
 };
 
 export const theme = createTheme({
-  primaryColor: 'stamp',
-  colors: { stamp },
-  primaryShade: { light: 6, dark: 3 },
-  fontFamily: "'PT Sans', 'Helvetica Neue', Arial, sans-serif",
-  fontFamilyMonospace: "'PT Mono', ui-monospace, Menlo, monospace",
-  headings: { fontFamily: "'PT Serif', Georgia, serif", fontWeight: '700' },
-  defaultRadius: 'xs',
-  radius: { xs: '3px', sm: '6px' },
+  primaryColor: 'aeza',
+  colors: { aeza },
+  primaryShade: { light: 8, dark: 4 },
+  fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
+  fontFamilyMonospace: "ui-monospace, 'SF Mono', Menlo, monospace",
+  headings: { fontFamily: "'Exo 2', 'Inter', sans-serif", fontWeight: '800' },
+  defaultRadius: 'sm',
+  radius: { xs: '6px', sm: '10px', md: '14px' },
   fontSizes: { sm: '15px', md: '16px' },
   variantColorResolver: resolver,
   components: {
-    Button: Button.extend({ defaultProps: { size: 'sm', radius: 'xs' }, classNames: { root: 'ik-btn' } }),
+    Button: Button.extend({ defaultProps: { size: 'sm', radius: 'sm' }, classNames: { root: 'ik-btn' } }),
     Input: Input.extend({ classNames: { input: 'ik-input', section: 'ik-section' } }),
     InputWrapper: InputWrapper.extend({ classNames: { label: 'ik-label', description: 'ik-hint', error: 'ik-error' } }),
     Modal: Modal.extend({

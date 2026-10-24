@@ -72,7 +72,7 @@ export function DashboardPage() {
     <section aria-labelledby="month-t">
       <div className="page-head">
         <h1 id="month-t">{monthTitle(ym)}</h1>
-        <div className="actions">
+        <div className="actions month-nav">
           <Button variant="subtle" size="xs" onClick={() => setYm(shiftMonth(ym, -1))}>‹ {monthName(shiftMonth(ym, -1))}</Button>
           {!isNow && <Button variant="subtle" size="xs" onClick={() => setYm(monthOf(today))}>Текущий месяц</Button>}
           <Button variant="subtle" size="xs" onClick={() => setYm(shiftMonth(ym, 1))}>{monthName(shiftMonth(ym, 1))} ›</Button>

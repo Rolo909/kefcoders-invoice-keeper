@@ -77,7 +77,7 @@ export function CalendarPage() {
     <>
       <div className="page-head">
         <h1>{monthTitle(ym)}</h1>
-        <div className="actions">
+        <div className="actions month-nav">
           <Button size="xs" variant="subtle" onClick={() => go(-1)}>‹ {monthName(shiftMonth(ym, -1))}</Button>
           {ym !== monthOf(today) && <Button size="xs" variant="subtle" onClick={() => { setYm(monthOf(today)); setSel(today); setFocusDay(today); }}>Сегодня</Button>}
           <Button size="xs" variant="subtle" onClick={() => go(1)}>{monthName(shiftMonth(ym, 1))} ›</Button>

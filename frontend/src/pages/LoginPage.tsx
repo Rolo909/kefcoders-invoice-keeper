@@ -5,6 +5,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useLogin } from '../api/hooks';
 import { useAuth } from '../auth/context';
+import { Logo } from '../components/Logo';
 
 const SECTION: Record<string, string> = {
   '/occurrences': 'Периоды', '/recurring-payments': 'Регулярные платежи', '/calendar': 'Календарь', '/summary': 'Итоги',
@@ -47,11 +48,11 @@ export function LoginPage() {
   return (
     <main className="login-page">
       <form className="login-card" onSubmit={submit} noValidate aria-labelledby="lg-t">
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-          <b className="serif" style={{ fontSize: 20 }}>Invoice Keeper</b>
+        <Logo />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <h1 id="lg-t">Вход</h1>
           <span className="stamp" aria-hidden="true" style={{ fontSize: 12, transform: 'rotate(-3deg)' }}>Книга платежей</span>
         </div>
-        <h1 id="lg-t">Вход</h1>
         {section && !params.get('state') && <p className="note">Войдите, чтобы открыть раздел «{section}».</p>}
         {params.get('state') === 'loggedout' && <p className="note" role="status">Вы вышли из панели.</p>}
         {error && <p className="form-error" role="alert">{error}</p>}

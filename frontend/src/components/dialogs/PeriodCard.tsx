@@ -62,7 +62,7 @@ export function PeriodCard({ id, asPage = false }: { id: string; asPage?: boolea
       <p className="crumbs">
         <Link to={`/recurring-payments/${p.id}`}>Регулярный платёж</Link> · {PERIOD_LABEL[p.period].toLowerCase()}{p.is_deleted ? ' · прекращён' : ''}
       </p>
-      <Title className="serif" style={{ fontSize: asPage ? 40 : 28, lineHeight: 1.15 }}>{p.name}</Title>
+      <Title className="display" style={{ fontSize: asPage ? 40 : 28, lineHeight: 1.15 }}>{p.name}</Title>
       <p className={`st ${o.state}`} style={{ marginTop: 8 }}>{statusLine(o, today)}</p>
       <p className="big-sum">{num(o.amount)}<small>{CURRENCY_SIGN[o.currency]}</small></p>
       <dl className="facts">
