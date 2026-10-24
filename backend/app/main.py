@@ -12,6 +12,27 @@ from app.errors import register_error_handlers
 from app.services.auth import LoginRateLimiter
 from app.services.reminders import ReminderDispatcher, build_notifiers
 
+API_DESCRIPTION = """
+Напоминания о регулярных платежах: аренда, подписки, серверы.
+
+**Авторизация.** `POST /api/v1/auth/login` → скопируйте `access_token` → кнопка **Authorize**.
+Веб-панель использует тот же вход, токен хранится в HttpOnly-cookie.
+
+**Роли.** Администратор (задаётся в `.env`) управляет платежами и пользователями.
+Пользователь видит платежи, отмечает оплату и исправляет фактическую дату.
+
+**Ошибки** — всегда `{"detail": "текст для пользователя", "code": "машинный код"}`.
+""".strip()
+
+OPENAPI_TAGS = [
+    {"name": "auth", "description": "Вход, текущий пользователь, выход"},
+    {"name": "recurring-payments", "description": "Регулярные платежи (создают и прекращают только администраторы)"},
+    {"name": "payment-occurrences", "description": "Периоды платежей: срок, отметка «Оплачено», фактическая дата"},
+    {"name": "payments", "description": "Итоги по валютам — отдельно RUB, USD и EUR, без конвертации"},
+    {"name": "users", "description": "Обычные пользователи (только для администратора)"},
+    {"name": "health", "description": "Проверка работоспособности"},
+]
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -26,7 +47,8 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Invoice Keeper API",
         version="0.1.0",
-        description="Напоминания о регулярных платежах: платежи, периоды оплаты, итоги по валютам, пользователи.",
+        description=API_DESCRIPTION,
+        openapi_tags=OPENAPI_TAGS,
         docs_url=f"{API_PREFIX}/docs",
         openapi_url=f"{API_PREFIX}/openapi.json",
         redoc_url=None,

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -33,15 +34,19 @@ def record(
     entity: tuple[str, uuid.UUID] | None = None,
     details: dict[str, Any] | None = None,
     ip: str | None = None,
+    at: datetime | None = None,
 ) -> None:
-    """Добавляет запись журнала в текущую транзакцию — она сохранится вместе с самим действием."""
+    """Добавляет запись журнала в текущую транзакцию — она сохранится вместе с самим действием.
+
+    at — время события, если оно было раньше записи (тестовые данные); обычно не передаётся.
+    """
     login = actor.login if actor is not None else (actor_login or "")
     entity_type, entity_id = entity if entity is not None else (None, None)
     session.add(
         AuditLog(
             # clock_timestamp(), а не now(): now() — время начала транзакции, и несколько действий
             # в одной транзакции получили бы одно время и потеряли порядок.
-            at=func.clock_timestamp(),
+            at=at if at is not None else func.clock_timestamp(),
             actor_id=actor.id if actor is not None else None,
             actor_login=login[:ACTOR_LOGIN_MAX_LENGTH],
             action=action.value,
