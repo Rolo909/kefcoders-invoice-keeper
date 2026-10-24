@@ -21,7 +21,7 @@ from app.config import Settings
 from app.db import SessionFactory
 from app.domain.enums import NotificationChannel, NotificationKind, NotificationStatus, OccurrenceStatus
 from app.domain.status import today_in
-from app.models import Notification, PaymentOccurrence, RecurringPayment
+from app.models import Notification, PaymentOccurrence, RecurringPayment, TelegramMessage
 from app.services.notifiers.base import Notifier, Reminder, SendResult
 from app.services.notifiers.email import EmailNotifier
 from app.services.notifiers.inapp import InAppNotifier
@@ -59,7 +59,10 @@ def build_notifiers(settings: Settings, session_factory: SessionFactory) -> list
     if settings.telegram_enabled:
         notifiers.append(
             TelegramNotifier(
-                _secret(settings.telegram_bot_token), settings.telegram_chat_id, public_web_url=settings.public_web_url
+                _secret(settings.telegram_bot_token),
+                settings.telegram_chat_id,
+                public_web_url=settings.public_web_url,
+                session_factory=session_factory,
             )
         )
     if settings.email_enabled:
@@ -154,6 +157,22 @@ async def _store_result(session: AsyncSession, notification_id: uuid.UUID, resul
             telegram_message_id=result.telegram_message_id,
         )
     )
+    if result.telegram_messages:
+        await session.execute(
+            pg_insert(TelegramMessage)
+            .values(
+                [
+                    {
+                        "notification_id": notification_id,
+                        "chat_id": m.chat_id,
+                        "message_id": m.message_id,
+                        "user_id": m.user_id,
+                    }
+                    for m in result.telegram_messages
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["notification_id", "chat_id"])
+        )
 
 
 async def _candidates(
@@ -211,6 +230,20 @@ class ReminderDispatcher:
                 logger.exception("Проверка канала %s не удалась", channel)
                 results.append((channel, SendResult(ok=False, error=f"{exc.__class__.__name__}: {exc}")))
         return results
+
+    async def sync_telegram(self, occurrence_id: uuid.UUID, *, pressed: tuple[int, int] | None = None) -> int:
+        """Заменить сообщения напоминания в Telegram на «оплачено» или вернуть напоминание с кнопкой.
+
+        Вызывается после отметки или снятия оплаты — в панели и кнопкой в боте.
+        """
+        edited = 0
+        for notifier in self._notifiers:
+            if isinstance(notifier, TelegramNotifier):
+                try:
+                    edited += await notifier.sync(occurrence_id, today=today_in(self._timezone), pressed=pressed)
+                except Exception:  # Telegram недоступен — оплата уже сохранена, сообщения поправятся вручную
+                    logger.exception("Не удалось обновить сообщения Telegram по периоду %s", occurrence_id)
+        return edited
 
     async def run(self, *, today: date | None = None, payment_id: uuid.UUID | None = None) -> int:
         """Отправить все положенные напоминания (или только по одному платежу). Возвращает число отправленных."""

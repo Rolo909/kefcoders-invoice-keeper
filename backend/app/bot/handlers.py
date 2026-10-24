@@ -19,6 +19,7 @@ from app.db import SessionFactory
 from app.domain.status import today_in
 from app.models import User
 from app.services.notifiers.formatting import format_date
+from app.services.reminders import ReminderDispatcher
 from app.services.telegram import (
     PAY_CALLBACK_PREFIX,
     LinkResult,
@@ -80,7 +81,12 @@ async def link(message: Message, command: CommandObject, session_factory: Sessio
         await message.answer(LINK_INVALID)
 
 
-async def pay(callback: CallbackQuery, session_factory: SessionFactory, timezone: ZoneInfo) -> None:
+async def pay(
+    callback: CallbackQuery,
+    session_factory: SessionFactory,
+    timezone: ZoneInfo,
+    reminders: ReminderDispatcher | None = None,
+) -> None:
     occurrence_id = parse_pay_callback(callback.data)
     if occurrence_id is None:
         await callback.answer(STALE_BUTTON, show_alert=True)
@@ -106,8 +112,12 @@ async def pay(callback: CallbackQuery, session_factory: SessionFactory, timezone
     else:
         # Нажали одновременно или по устаревшему сообщению: оплату второй раз не отмечаем.
         await callback.answer(already_paid_text(outcome.paid_by, outcome.paid_date), show_alert=True)
-    # Убираем кнопку и дописываем, кто оплатил, — чтобы весь чат видел, что вопрос закрыт.
     message = callback.message
+    if reminders is not None and isinstance(message, Message):
+        # Все копии напоминания (общий чат и лички) становятся «✅ Платёж оплачен», включая это сообщение.
+        await reminders.sync_telegram(occurrence_id, pressed=(message.chat.id, message.message_id))
+        return
+    # Без диспетчера (тесты): убираем кнопку и дописываем, кто оплатил, только в этом сообщении.
     if isinstance(message, Message) and message.html_text and "✅ Оплачено:" not in message.html_text:
         with contextlib.suppress(TelegramBadRequest):  # сообщение слишком старое или уже изменено
             await message.edit_text(

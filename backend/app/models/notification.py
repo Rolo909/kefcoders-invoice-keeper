@@ -44,3 +44,20 @@ class NotificationRead(Base):
         ForeignKey("notifications.id", ondelete="CASCADE"), primary_key=True
     )
     read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TelegramMessage(UuidPkMixin, CreatedAtMixin, Base):
+    """Сообщение с напоминанием в Telegram: в общем чате или в личке тому, кого в чате нет.
+
+    Нужны все, чтобы после оплаты (в панели или кнопкой) заменить каждое на «оплачено», а при снятии
+    отметки — вернуть напоминание с кнопкой.
+    """
+
+    __tablename__ = "telegram_messages"
+    __table_args__ = (UniqueConstraint("notification_id", "chat_id"),)
+
+    notification_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notifications.id", ondelete="CASCADE"), index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+    # Кому ушло в личку; None — общий чат.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

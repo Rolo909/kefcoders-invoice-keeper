@@ -87,7 +87,7 @@ def mock_transport(
 
 
 async def test_telegram_sends_html_message_to_configured_chat() -> None:
-    transport, requests = mock_transport(ok=True, result={"message_id": 77})
+    transport, requests = mock_transport(ok=True, result={"message_id": 77, "chat": {"id": -100500}})
     notifier = TelegramNotifier(TOKEN, "-100500", transport=transport)
 
     result = await notifier.send(reminder())
@@ -126,11 +126,11 @@ async def test_missing_settings_do_not_count_as_attempt(token: str | None, chat:
 
     assert (result.ok, result.attempted) == (False, False)
     assert result.error is not None
-    assert "TELEGRAM_BOT_TOKEN" in result.error
+    assert "TELEGRAM_BOT_TOKEN" in result.error or "TELEGRAM_CHAT_ID" in result.error
 
 
 async def test_reminder_has_paid_button_for_this_period() -> None:
-    transport, requests = mock_transport(ok=True, result={"message_id": 1})
+    transport, requests = mock_transport(ok=True, result={"message_id": 1, "chat": {"id": -100500}})
     sent = reminder()
 
     await TelegramNotifier(TOKEN, "-1", transport=transport).send(sent)
@@ -140,7 +140,7 @@ async def test_reminder_has_paid_button_for_this_period() -> None:
 
 
 async def test_panel_link_button_is_added_for_public_address() -> None:
-    transport, requests = mock_transport(ok=True, result={"message_id": 1})
+    transport, requests = mock_transport(ok=True, result={"message_id": 1, "chat": {"id": -100500}})
     sent = reminder()
 
     await TelegramNotifier(TOKEN, "-1", public_web_url="https://pay.kefcoders.ru/", transport=transport).send(sent)

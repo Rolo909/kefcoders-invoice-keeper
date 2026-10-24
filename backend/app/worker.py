@@ -96,7 +96,7 @@ async def main() -> None:
         settings.reminder_check_interval_minutes,
         ", ".join(n.channel.value for n in notifiers) or "нет",
     )
-    bot_task = _start_bot(settings)
+    bot_task = _start_bot(settings, dispatcher)
     try:
         await stop.wait()
     finally:
@@ -109,12 +109,12 @@ async def main() -> None:
         logger.info("Worker остановлен")
 
 
-def _start_bot(settings: Settings) -> asyncio.Task[None] | None:
+def _start_bot(settings: Settings, reminders: ReminderDispatcher) -> asyncio.Task[None] | None:
     """Бот (кнопка «Оплачено», /link) работает, только если задан токен; иначе worker просто напоминает."""
     if not settings.telegram_enabled or settings.telegram_bot_token is None:
         logger.info("Telegram-бот не запущен: TELEGRAM_BOT_TOKEN не задан")
         return None
-    dispatcher = build_dispatcher(session_factory, settings.timezone)
+    dispatcher = build_dispatcher(session_factory, settings.timezone, reminders)
     task = asyncio.create_task(run_bot(settings.telegram_bot_token.get_secret_value(), dispatcher))
     task.add_done_callback(_log_bot_exit)
     return task

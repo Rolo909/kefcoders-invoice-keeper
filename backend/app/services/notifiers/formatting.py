@@ -34,6 +34,16 @@ def _when(due: date, today: date) -> str:
     return f"через {plural_days(days_left)}"
 
 
+def paid_text_html(
+    *, payment_name: str, amount: Decimal, currency: str, due_date: date, payer: str, paid_date: date
+) -> str:
+    """Чем заменяется напоминание после оплаты — в панели или кнопкой в Telegram."""
+    return (
+        f"✅ Платёж оплачен\n<b>{escape(payment_name)}</b>\nСумма: {format_money(amount)} {currency}\n"
+        f"Срок оплаты: {format_date(due_date)}\nОплатил(а): {escape(payer)}, {format_date(paid_date)}"
+    )
+
+
 def reminder_text_html(reminder: Reminder) -> str:
     name = escape(reminder.payment_name)
     money = f"{format_money(reminder.amount)} {reminder.currency.value}"

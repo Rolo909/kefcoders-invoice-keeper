@@ -2,9 +2,9 @@ import uuid
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Query, Request, status
 
-from app.api.deps import CurrentUser, SettingsDep, TodayDep, client_ip, utc_now
+from app.api.deps import CurrentUser, RemindersDep, SettingsDep, TodayDep, client_ip, utc_now
 from app.api.v1.presenters import occurrence_detail_out, occurrence_out
 from app.db import SessionDep
 from app.domain.enums import Currency, OccurrenceState, OccurrenceStatus
@@ -97,6 +97,8 @@ async def update_occurrence(
     session: SessionDep,
     settings: SettingsDep,
     today: TodayDep,
+    reminders: RemindersDep,
+    background: BackgroundTasks,
 ) -> OccurrenceOut:
     view = await occurrences_service.update_occurrence(
         session,
@@ -108,4 +110,6 @@ async def update_occurrence(
         now=utc_now(),
         ip=client_ip(request),
     )
+    # Напоминания в Telegram становятся «оплачено» (или снова напоминанием, если отметку сняли).
+    background.add_task(reminders.sync_telegram, occurrence_id)
     return occurrence_out(view, today=today, remind_days_before=settings.remind_days_before)

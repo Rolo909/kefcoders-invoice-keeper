@@ -9,6 +9,7 @@ from aiogram.types import BotCommand
 from app.bot.flood import FloodGuard
 from app.bot.handlers import build_router
 from app.db import SessionFactory
+from app.services.reminders import ReminderDispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,11 @@ COMMANDS = [
 ]
 
 
-def build_dispatcher(session_factory: SessionFactory, timezone: ZoneInfo) -> Dispatcher:
-    dispatcher = Dispatcher(session_factory=session_factory, timezone=timezone)
+def build_dispatcher(
+    session_factory: SessionFactory, timezone: ZoneInfo, reminders: ReminderDispatcher | None = None
+) -> Dispatcher:
+    """reminders — чтобы кнопка «Оплачено» заменила все копии напоминания на «оплачено»."""
+    dispatcher = Dispatcher(session_factory=session_factory, timezone=timezone, reminders=reminders)
     guard = FloodGuard()
     dispatcher.message.outer_middleware(guard)
     dispatcher.callback_query.outer_middleware(guard)
