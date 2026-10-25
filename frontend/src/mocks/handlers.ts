@@ -9,6 +9,8 @@ import {
 } from './db';
 
 const API = '/api/v1';
+/** Ссылки на календарь: пользователь → секрет (в имитации живут до перезагрузки страницы). */
+const calendarTokens = new Map<string, string>();
 const SESSION_KEY = 'ik-mock-session';
 const CURRENCIES = ['RUB', 'USD', 'EUR'] as const;
 const PERIODS = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
@@ -521,5 +523,18 @@ export const handlers = [
   http.post(`${API}/telegram/link-code`, guarded(() => {
     const code = String(Math.floor(100000 + Math.random() * 900000));
     return json({ code, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() });
+  })),
+
+  // ----- подписка на календарь (.ics) -----
+  http.post(`${API}/calendar/subscription`, guarded(({ me }) => {
+    const token = calendarTokens.get(me.id) ?? uid();
+    calendarTokens.set(me.id, token);
+    const url = `${location.origin}${API}/calendar/${token}.ics`;
+    return json({ url, webcal_url: url.replace(/^https?:\/\//, 'webcal://') });
+  })),
+
+  http.delete(`${API}/calendar/subscription`, guarded(({ me }) => {
+    calendarTokens.delete(me.id);
+    return noContent();
   })),
 ];

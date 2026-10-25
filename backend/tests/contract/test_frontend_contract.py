@@ -176,6 +176,12 @@ async def test_telegram_link_code(api: AsyncClient, tokens: dict[str, str]) -> N
     assert_matches("LinkCode", response.json())
 
 
+async def test_calendar_subscription(api: AsyncClient, tokens: dict[str, str]) -> None:
+    response = await api.post("/api/v1/calendar/subscription", headers=bearer(tokens["user"]))
+
+    assert_matches("CalendarSubscription", response.json())
+
+
 async def test_calendar(api: AsyncClient, tokens: dict[str, str], paid_period: dict[str, Any]) -> None:
     near = await get(api, tokens["user"], "/payments/calendar", month="2026-10")
     far = await get(api, tokens["user"], "/payments/calendar", month="2027-06")

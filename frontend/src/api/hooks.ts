@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type {
-  Attachment, AuditLog, Budget, CalendarMonth, Inbox, LinkCode, LoginResponse, Me, NewPayment, NotificationLog,
+  Attachment, AuditLog, Budget, CalendarMonth, CalendarSubscription, Inbox, LinkCode, LoginResponse, Me, NewPayment, NotificationLog,
   Occurrence, OccurrenceDetail, OccurrenceQuery, Page, RecurringPayment, RecurringPaymentDetail, Summary, User, UserInput,
 } from './types';
 
@@ -224,3 +224,9 @@ export function useReadInbox() {
 }
 
 export const useLinkCode = () => useMutation({ mutationFn: () => api<LinkCode>('/telegram/link-code', { method: 'POST' }) });
+
+/** Ссылка на календарь: повторный вызов отдаёт ту же ссылку. */
+export const useCalendarSubscription = () =>
+  useMutation({ mutationFn: () => api<CalendarSubscription>('/calendar/subscription', { method: 'POST' }) });
+
+export const useRevokeCalendar = () => useMutation({ mutationFn: () => api<void>('/calendar/subscription', { method: 'DELETE' }) });

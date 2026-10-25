@@ -2,10 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button, Checkbox, TextInput, useMantineColorScheme } from '@mantine/core';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { useLinkCode, useLogout, useUpdateMe } from '../api/hooks';
+import { useCalendarSubscription, useLinkCode, useLogout, useRevokeCalendar, useUpdateMe } from '../api/hooks';
 import { useAuth } from '../auth/context';
 import { toast } from '../components/dialogs/actions';
-import { TelegramIcon } from '../components/icons';
+import { CalendarIcon, TelegramIcon } from '../components/icons';
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -13,6 +13,8 @@ export function SettingsPage() {
   const logout = useLogout();
   const link = useLinkCode();
   const update = useUpdateMe();
+  const calendar = useCalendarSubscription();
+  const revokeCalendar = useRevokeCalendar();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const [email, setEmail] = useState(user?.email ?? '');
   const [notify, setNotify] = useState(user?.notify_email ?? false);
@@ -38,6 +40,23 @@ export function SettingsPage() {
   };
 
   const code = link.data?.code;
+  const feed = calendar.data;
+
+  const copyFeed = async () => {
+    if (!feed) return;
+    try {
+      await navigator.clipboard.writeText(feed.url);
+      toast('Ссылка скопирована. Вставьте её в календаре: «Добавить по URL».');
+    } catch {
+      toast('Не удалось скопировать — выделите ссылку и скопируйте вручную.');
+    }
+  };
+
+  const disableFeed = async () => {
+    await revokeCalendar.mutateAsync();
+    calendar.reset();
+    toast('Ссылка отключена: календари перестанут получать сроки. Новую можно получить в любой момент.');
+  };
 
   return (
     <div className="prof">
@@ -67,6 +86,30 @@ export function SettingsPage() {
               <div><Button variant="filled" loading={link.isPending} onClick={() => link.mutate()}>Получить код</Button></div>
             )}
           </>
+        )}
+      </section>
+
+      <section className="block" aria-labelledby="cal-t">
+        <h2 id="cal-t"><CalendarIcon />Календарь</h2>
+        <p className="muted">Сроки платежей в Google, Outlook, Яндекс- или Apple-календаре: сумма, статус и напоминание за 3 дня. Календарь сам подтягивает изменения — оплату, новые платежи, просрочки.</p>
+        {feed ? (
+          <div style={{ display: 'grid', gap: 12, maxWidth: 560 }} aria-live="polite">
+            <TextInput label="Ссылка для подписки" value={feed.url} readOnly classNames={{ input: 'mono' }}
+              onFocus={(e) => e.currentTarget.select()} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Button variant="filled" onClick={copyFeed}>Скопировать ссылку</Button>
+              <Button component="a" href={feed.webcal_url} variant="outline">Открыть в приложении календаря</Button>
+            </div>
+            <ol className="steps">
+              <li><span><b>Google Календарь:</b> «Другие календари» → «+» → «Добавить по URL».</span></li>
+              <li><span><b>Яндекс Календарь:</b> «Новый календарь» → «Подписаться на календарь».</span></li>
+              <li><span><b>Outlook:</b> «Добавить календарь» → «Подписаться из Интернета».</span></li>
+            </ol>
+            <p className="small muted">По ссылке без входа видны сроки и суммы — не публикуйте её. Google обновляет подписку раз в несколько часов, остальные — чаще.</p>
+            <div><Button size="xs" variant="subtle" color="red" loading={revokeCalendar.isPending} onClick={disableFeed}>Отключить ссылку</Button></div>
+          </div>
+        ) : (
+          <div><Button variant="filled" loading={calendar.isPending} onClick={() => calendar.mutate()}>Получить ссылку</Button></div>
         )}
       </section>
 

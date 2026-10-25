@@ -7,6 +7,9 @@ export const BellIcon = () => (
 export const ClipIcon = () => (
   <svg className="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7l-7.6 7.6a1.7 1.7 0 0 1-2.4-2.4l7-7" /></svg>
 );
+export const CalendarIcon = () => (
+  <svg className="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>
+);
 export const TelegramIcon = () => (
   <svg className="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z" /><path d="M9 13l8-6" /></svg>
 );

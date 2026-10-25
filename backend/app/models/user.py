@@ -25,6 +25,8 @@ class User(UuidPkMixin, CreatedAtMixin, Base):
     role: Mapped[Role] = mapped_column(pg_enum(Role, "user_role"))
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
+    # Секрет в ссылке подписки на календарь (.ics): календарные сервисы не умеют входить в панель.
+    calendar_token: Mapped[str | None] = mapped_column(String(64), unique=True)
     notify_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

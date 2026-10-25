@@ -17,6 +17,8 @@ export const ACTION_LABEL: Record<string, string> = {
   'attachment.delete': 'Удаление вложения',
   'telegram.mark_paid': 'Оплата из Telegram',
   'budget.update': 'Изменение бюджетов',
+  'calendar.link_create': 'Ссылка на календарь',
+  'calendar.link_revoke': 'Отключение календаря',
 };
 
 const s = (v: unknown) => (v === null || v === undefined ? '' : String(v));
@@ -41,6 +43,8 @@ export function describeAudit(a: AuditLog) {
     case 'user.update': return `Пользователь ${s(d.login)}: изменены данные${d.password_changed ? ', пароль сменён' : ''}`;
     case 'user.delete': return `Удалён пользователь ${s(d.login)}`;
     case 'budget.update': return 'Изменены бюджеты';
+    case 'calendar.link_create': return 'Выдана ссылка подписки на календарь сроков';
+    case 'calendar.link_revoke': return 'Ссылка на календарь отключена';
     default: return Object.entries(d).map(([k, v]) => `${k}: ${s(v)}`).join(', ');
   }
 }
