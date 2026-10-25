@@ -21,6 +21,21 @@ test('пользователь не видит разделов админист
   await expect(page.getByText('Раздел доступен только администратору')).toBeVisible();
 });
 
+test('вход и выход в одной вкладке сразу видны в остальных', async ({ context }) => {
+  // Cookie сессии одна на весь сайт: вкладки браузера не должны молча работать от чужого имени.
+  const first = await context.newPage();
+  const second = await context.newPage();
+  await loginUi(first, ANNA);
+  await expect(first.getByText('Анна Ковалёва').first()).toBeVisible();
+
+  await loginUi(second, { login: 'maria', password: 'maria12345' });
+  await expect(first.getByText('Мария Лебедева').first()).toBeVisible();
+
+  await second.goto('/settings');
+  await second.getByRole('button', { name: 'Выйти' }).click();
+  await expect(first).toHaveURL(/\/login/);
+});
+
 test('неверный пароль — понятная ошибка', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Логин').fill('anna');
