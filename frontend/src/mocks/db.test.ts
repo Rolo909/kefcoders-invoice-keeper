@@ -12,7 +12,7 @@ const payment = (patch: Partial<DbPayment> = {}): DbPayment => ({
   end_date: null, is_active: true, deleted_at: null, created_by: 'u1', created_at: '2026-10-01T00:00:00Z', ...patch,
 });
 
-describe('статус периода (TASK_PLAN §4.3)', () => {
+describe('статус периода (ARCHITECTURE.md §4.3)', () => {
   const T = '2026-10-24';
   it('оплата в день срока — вовремя', () => {
     const o = occ({ status: 'paid', paid_date: '2026-10-24' });
@@ -37,7 +37,7 @@ describe('статус периода (TASK_PLAN §4.3)', () => {
   });
 });
 
-describe('периоды (TASK_PLAN §4.2, §4.6)', () => {
+describe('периоды (ARCHITECTURE.md §4.2, §4.6)', () => {
   it('создаются до горизонта 60 дней и минимум один будущий', () => {
     const db = emptyDb();
     const p = payment({ first_due_date: '2026-08-26' });

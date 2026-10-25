@@ -1,4 +1,4 @@
-"""Привязка Telegram по коду и кнопка «✅ Оплачено» (TASK_PLAN §6)."""
+"""Привязка Telegram по коду и кнопка «✅ Оплачено» (ARCHITECTURE.md §6)."""
 
 import uuid
 from datetime import UTC, date, datetime, timedelta

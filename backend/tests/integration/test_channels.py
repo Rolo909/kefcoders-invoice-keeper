@@ -1,4 +1,4 @@
-"""Дополнительные каналы: почта (SMTP), webhook и колокольчик в панели (TASK_PLAN §7)."""
+"""Дополнительные каналы: почта (SMTP), webhook и колокольчик в панели (ARCHITECTURE.md §7)."""
 
 import json
 import uuid
