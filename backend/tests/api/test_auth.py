@@ -11,7 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AuditLog, Session, User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 
-PUBLIC_PATHS = {"/api/v1/health", "/api/v1/auth/login", "/api/v1/docs", "/api/v1/openapi.json"}
+PUBLIC_PATHS = {
+    "/api/v1/health",
+    "/api/v1/auth/login",
+    "/api/v1/docs",
+    "/api/v1/openapi.json",
+    "/api/v1/calendar/{token}.ics",  # по секрету в ссылке
+}
 
 
 async def _actions(db_session: AsyncSession) -> list[str]:

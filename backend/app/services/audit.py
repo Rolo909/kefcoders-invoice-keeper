@@ -25,6 +25,8 @@ class AuditAction(StrEnum):
     OCCURRENCE_CHANGE_PAID_DATE = "occurrence.change_paid_date"
     TELEGRAM_MARK_PAID = "telegram.mark_paid"
     BUDGET_UPDATE = "budget.update"
+    CALENDAR_LINK_CREATE = "calendar.link_create"
+    CALENDAR_LINK_REVOKE = "calendar.link_revoke"
     ATTACHMENT_ADD = "attachment.add"
     ATTACHMENT_DELETE = "attachment.delete"
 

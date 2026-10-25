@@ -205,6 +205,12 @@ export interface LinkCode {
   expires_at: string;
 }
 
+/** Личная ссылка подписки на календарь сроков (.ics). */
+export interface CalendarSubscription {
+  url: string;
+  webcal_url: string;
+}
+
 export interface OccurrenceQuery {
   status?: OccurrenceStatus;
   overdue?: boolean;
