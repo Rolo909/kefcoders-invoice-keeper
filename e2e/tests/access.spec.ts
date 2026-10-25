@@ -28,12 +28,14 @@ test('вход и выход в одной вкладке сразу видны 
   await loginUi(first, ANNA);
   await expect(first.getByText('Анна Ковалёва').first()).toBeVisible();
 
-  await loginUi(second, { login: 'maria', password: 'maria12345' });
-  await expect(first.getByText('Мария Лебедева').first()).toBeVisible();
-
+  // Сменить пользователя: выйти во второй вкладке — первая сразу показывает вход.
   await second.goto('/settings');
   await second.getByRole('button', { name: 'Выйти' }).click();
   await expect(first).toHaveURL(/\/login/);
+
+  // Войти под другим во второй вкладке — первая показывает его, а не прежнего пользователя.
+  await loginUi(second, { login: 'maria', password: 'maria12345' });
+  await expect(first.getByText('Мария Лебедева').first()).toBeVisible();
 });
 
 test('неверный пароль — понятная ошибка', async ({ page }) => {
