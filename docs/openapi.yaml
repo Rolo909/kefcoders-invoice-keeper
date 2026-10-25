@@ -61,6 +61,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/calendar/{token}.ics:
+    get:
+      tags:
+      - calendar
+      summary: Сроки платежей в формате iCalendar
+      description: 'Для календарных сервисов: все сроки на полгода назад и год вперёд — с суммой, статусом и напоминанием
+        за REMIND_DAYS_BEFORE дней. Неизвестная или отключённая ссылка — 404.'
+      operationId: feed_api_v1_calendar__token__ics_get
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
+      responses:
+        '200':
+          description: Файл .ics
+          content:
+            text/calendar: {}
+        '404':
+          description: Ссылка неизвестна или отключена
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/auth/me:
     get:
       tags:
@@ -1146,6 +1174,34 @@ paths:
                 $ref: '#/components/schemas/LinkCodeOut'
       security:
       - HTTPBearer: []
+  /api/v1/calendar/subscription:
+    post:
+      tags:
+      - calendar
+      summary: Ссылка подписки на календарь сроков (.ics)
+      description: 'Возвращает личную ссылку; повторный вызов отдаёт ту же. Ссылку не нужно публиковать: по ней без входа
+        видны сроки и суммы платежей.'
+      operationId: subscribe_api_v1_calendar_subscription_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarSubscriptionOut'
+      security:
+      - HTTPBearer: []
+    delete:
+      tags:
+      - calendar
+      summary: Отключить ссылку на календарь
+      description: Подписанные календари перестанут получать сроки. Новая ссылка — снова POST /calendar/subscription.
+      operationId: unsubscribe_api_v1_calendar_subscription_delete
+      responses:
+        '204':
+          description: Successful Response
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AttachmentKind:
@@ -1367,6 +1423,21 @@ components:
       - month
       - days
       title: CalendarMonthOut
+    CalendarSubscriptionOut:
+      properties:
+        url:
+          type: string
+          title: Url
+          description: 'Ссылка для подписки: Google, Outlook, Яндекс-календарь («добавить по URL»)'
+        webcal_url:
+          type: string
+          title: Webcal Url
+          description: Та же ссылка в схеме webcal:// — открывает приложение календаря
+      type: object
+      required:
+      - url
+      - webcal_url
+      title: CalendarSubscriptionOut
     ChannelCheckOut:
       properties:
         channel:
