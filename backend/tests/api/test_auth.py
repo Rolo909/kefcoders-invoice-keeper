@@ -5,10 +5,10 @@ from datetime import UTC, datetime, timedelta
 import time_machine
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, User
+from app.models import AuditLog, Session, User
 from tests.conftest import ADMIN_LOGIN, ADMIN_PASSWORD, USER_LOGIN, USER_PASSWORD, bearer, login
 
 PUBLIC_PATHS = {"/api/v1/health", "/api/v1/auth/login", "/api/v1/docs", "/api/v1/openapi.json"}
@@ -150,3 +150,38 @@ async def test_logins_and_logouts_are_audited(api: AsyncClient, db_session: Asyn
     await api.post("/api/v1/auth/logout", headers=bearer(token))
 
     assert await _actions(db_session) == ["auth.login_failed", "auth.login", "auth.logout"]
+
+
+# ---------- продление cookie ----------
+
+
+async def test_cookie_is_renewed_together_with_session(
+    api: AsyncClient, regular_user: User, db_session: AsyncSession
+) -> None:
+    """Сессия скользящая: при продлении на сервере браузер получает свежую cookie — иначе выкинет
+    через SESSION_TTL_HOURS после входа, даже если человек заходит каждый день."""
+    login_response = await api.post("/api/v1/auth/login", json={"login": USER_LOGIN, "password": USER_PASSWORD})
+    assert login_response.status_code == 200
+    fresh = await api.get("/api/v1/auth/me")
+    assert "set-cookie" not in fresh.headers  # только что вошли — продлевать рано
+
+    await db_session.execute(update(Session).values(last_seen_at=func.now() - timedelta(hours=1)))
+    renewed = await api.get("/api/v1/auth/me")
+
+    cookie = renewed.headers["set-cookie"]
+    assert cookie.startswith(f"ik_session={api.cookies['ik_session']};")
+    assert "Max-Age=604800" in cookie
+    assert "HttpOnly" in cookie
+
+
+async def test_bearer_requests_do_not_get_cookie(
+    api: AsyncClient, regular_user: User, db_session: AsyncSession
+) -> None:
+    token = await login(api, USER_LOGIN, USER_PASSWORD)
+    api.cookies.clear()
+    await db_session.execute(update(Session).values(last_seen_at=func.now() - timedelta(hours=1)))
+
+    response = await api.get("/api/v1/auth/me", headers=bearer(token))
+
+    assert response.status_code == 200
+    assert "set-cookie" not in response.headers

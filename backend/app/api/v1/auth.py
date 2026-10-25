@@ -8,6 +8,7 @@ from app.api.deps import (
     SettingsDep,
     client_ip,
     session_ttl,
+    set_session_cookie,
     utc_now,
 )
 from app.db import SessionDep
@@ -63,15 +64,7 @@ async def login(
     audit.record(session, AuditAction.LOGIN, actor=user, entity=("user", user.id), ip=ip)
     await session.commit()
 
-    response.set_cookie(
-        SESSION_COOKIE,
-        opened.token,
-        max_age=int(session_ttl(settings).total_seconds()),
-        httponly=True,
-        samesite="lax",
-        secure=request.url.scheme == "https",
-        path="/",
-    )
+    set_session_cookie(response, request, opened.token, settings)
     return LoginOut(access_token=opened.token, expires_at=opened.expires_at, user=UserOut.model_validate(user))
 
 

@@ -5,6 +5,7 @@ import { setUnauthorizedHandler } from '../api/client';
 import { qk, useMe } from '../api/hooks';
 import { todayIn } from '../lib/dates';
 import { AuthContext, type AuthState } from './context';
+import { onAuthChangedElsewhere } from './sync';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const me = useMe();
@@ -19,6 +20,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => setUnauthorizedHandler(null);
   }, [qc, navigate]);
+
+  // В другой вкладке вошли под другим пользователем или вышли — показываем актуальное состояние.
+  useEffect(() => onAuthChangedElsewhere(() => window.location.reload()), []);
 
   const value = useMemo<AuthState>(() => {
     const data = me.isError ? undefined : me.data;

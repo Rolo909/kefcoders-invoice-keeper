@@ -245,8 +245,12 @@ svg.i.solid { fill: currentColor; stroke: none; }
 .ledger tr.month-row th { height: auto; padding: 28px 0 8px; border-bottom: 1px solid var(--rule-2); color: var(--ink); font: 800 18px/1.2 var(--f-display); text-transform: none; letter-spacing: 0; }
 .ledger tbody tr.month-row:first-child th { padding-top: 14px; }
 .ledger tr.stopped td { color: var(--ink-2); }
-.ledger.attn tr.overdue td { background: color-mix(in srgb, var(--red-soft) 85%, transparent); }
-.ledger.attn tr.overdue td:first-child { box-shadow: -10px 0 0 0 color-mix(in srgb, var(--red-soft) 85%, transparent); }
+/* Фон ячеек и полоса слева от строки (тень первой ячейки) берут цвет из одной переменной: при наведении
+   строка становится чуть темнее, а не белой — иначе по краям оставались красные полосы, а сигнал «просрочено» пропадал. */
+.ledger.attn tr.overdue { --overdue-tint: color-mix(in srgb, var(--red-soft) 85%, transparent); }
+.ledger.attn tr.overdue:hover { --overdue-tint: color-mix(in srgb, var(--red) 12%, var(--red-soft)); }
+.ledger.attn tbody tr.overdue > td { background: var(--overdue-tint); }
+.ledger.attn tbody tr.overdue > td:first-child { box-shadow: -10px 0 0 0 var(--overdue-tint); }
 .mark-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .soon b { font-weight: 700; color: var(--amber); }
 .soon small { display: block; color: var(--ink-2); font-size: 13px; line-height: 1.25; }

@@ -1,4 +1,5 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { announceAuthChange } from '../auth/sync';
 import { api } from './client';
 import type {
   Attachment, AuditLog, Budget, CalendarMonth, Inbox, LinkCode, LoginResponse, Me, NewPayment, NotificationLog,
@@ -34,7 +35,10 @@ export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { login: string; password: string }) => api<LoginResponse>('/auth/login', { method: 'POST', body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+    onSuccess: () => {
+      announceAuthChange();
+      return qc.invalidateQueries({ queryKey: qk.me });
+    },
   });
 }
 
@@ -42,7 +46,10 @@ export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api<void>('/auth/logout', { method: 'POST' }),
-    onSettled: () => qc.clear(),
+    onSettled: () => {
+      announceAuthChange();
+      qc.clear();
+    },
   });
 }
 

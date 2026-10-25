@@ -22,6 +22,8 @@ USER_AGENT_MAX_LENGTH = 512
 class AuthContext:
     user: User
     session_id: uuid.UUID
+    # Срок сессии только что продлён — cookie в браузере тоже нужно продлить.
+    refreshed: bool = False
 
 
 @dataclass(frozen=True)
@@ -98,11 +100,12 @@ async def resolve_session(session: AsyncSession, token: str, *, ttl: timedelta, 
     if row is None:
         return None
     user_session, user = row
-    if now - user_session.last_seen_at >= SESSION_REFRESH_INTERVAL:
+    refreshed = now - user_session.last_seen_at >= SESSION_REFRESH_INTERVAL
+    if refreshed:
         user_session.last_seen_at = now
         user_session.expires_at = now + ttl
         await session.commit()
-    return AuthContext(user=user, session_id=user_session.id)
+    return AuthContext(user=user, session_id=user_session.id, refreshed=refreshed)
 
 
 async def close_session(session: AsyncSession, session_id: uuid.UUID) -> None:

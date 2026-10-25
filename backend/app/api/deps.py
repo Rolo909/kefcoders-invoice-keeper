@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import Settings, get_settings
@@ -52,19 +52,38 @@ def get_login_limiter(request: Request) -> LoginRateLimiter:
     return limiter
 
 
+def set_session_cookie(response: Response, request: Request, token: str, settings: Settings) -> None:
+    """Cookie сессии веб-панели: живёт столько же, сколько сессия на сервере."""
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=int(session_ttl(settings).total_seconds()),
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+
+
 async def get_auth(
     request: Request,
+    response: Response,
     session: SessionDep,
     settings: SettingsDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> AuthContext:
     """Сессия из заголовка Authorization: Bearer (Swagger, API-клиенты) или из cookie (веб-панель)."""
-    token = credentials.credentials if credentials is not None else request.cookies.get(SESSION_COOKIE)
+    cookie = request.cookies.get(SESSION_COOKIE)
+    token = credentials.credentials if credentials is not None else cookie
     if not token:
         raise unauthorized()
     auth = await resolve_session(session, token, ttl=session_ttl(settings), now=utc_now())
     if auth is None:
         raise unauthorized()
+    if auth.refreshed and token == cookie:
+        # Сессия скользящая: продлили на сервере — продлеваем и cookie, иначе браузер забудет её
+        # через SESSION_TTL_HOURS после входа, даже если человек заходит каждый день.
+        set_session_cookie(response, request, token, settings)
     return auth
 
 
