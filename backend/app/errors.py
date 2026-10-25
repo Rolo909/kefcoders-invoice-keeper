@@ -1,4 +1,4 @@
-"""Ошибки приложения в едином формате ответа {"detail": "...", "code": "..."} (TASK_PLAN §5.4)."""
+"""Ошибки приложения в едином формате ответа {"detail": "...", "code": "..."} (ARCHITECTURE.md §5.4)."""
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError

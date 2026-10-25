@@ -1,6 +1,6 @@
 # Invoice Keeper — веб-панель
 
-React 18, Vite, TypeScript, Mantine 7, TanStack Query, React Router, react-hook-form и zod — стек из `TASK_PLAN.md` §1.
+React 18, Vite, TypeScript, Mantine 7, TanStack Query, React Router, react-hook-form и zod — стек из `ARCHITECTURE.md` §1.
 
 ## Запуск без бэкенда
 
@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Откройте `http://localhost:5173`. Запросы к `/api/v1` обрабатывает имитация сервера в браузере (`src/mocks`): те же эндпоинты и правила, что в `TASK_PLAN.md` §4–5. Данные хранятся в браузере и переживают перезагрузку. Сбросить их к исходным — открыть любой адрес с `?reset-demo`.
+Откройте `http://localhost:5173`. Запросы к `/api/v1` обрабатывает имитация сервера в браузере (`src/mocks`): те же эндпоинты и правила, что в `ARCHITECTURE.md` §4–5. Данные хранятся в браузере и переживают перезагрузку. Сбросить их к исходным — открыть любой адрес с `?reset-demo`.
 
 | Логин | Пароль | Роль |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ npm run build
 
 ## Что фронтенд ждёт от бэкенда
 
-Всё по `TASK_PLAN.md` §5, плюс уточнения ниже. Точные типы — в `src/api/types.ts`.
+Всё по `ARCHITECTURE.md` §5, плюс уточнения ниже. Точные типы — в `src/api/types.ts`.
 
 - `GET /auth/me` → `{ user, server_today, timezone }`. «Сегодня» фронтенд берёт только отсюда.
 - `PATCH /auth/me` `{ email, notify_email }` — пользователь меняет свою почту в профиле. Для администратора из `.env` — 403.

@@ -12,9 +12,8 @@
 | **Работающий сайт** | **https://84.21.191.15** — вход тестовым пользователем: `anna` / `anna12345` |
 | **Swagger (документация API)** | **https://84.21.191.15/api/v1/docs** |
 | OpenAPI-спецификация | [`docs/openapi.yaml`](docs/openapi.yaml) |
-| Сценарий защиты | [`docs/demo-scenario.md`](docs/demo-scenario.md) |
+| Архитектура и решения | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Развёртывание на VPS с HTTPS | [`docs/deploy-vps.md`](docs/deploy-vps.md) |
-| План, архитектурные решения | [`TASK_PLAN.md`](TASK_PLAN.md) |
 
 **Стек:** Python 3.12, FastAPI, SQLAlchemy 2 (async), PostgreSQL 16, Alembic, APScheduler, aiogram ·
 React 18, TypeScript, Vite, Mantine, TanStack Query · Docker Compose.
@@ -60,7 +59,7 @@ Swagger локально — http://localhost:8080/api/v1/docs.
 | `user` | `user12345` | пользователь |
 
 **Тестовые данные** — 13 регулярных платежей хостинг-провайдера в духе aeza.ru в трёх валютах.
-Даты считаются от дня запуска, поэтому сценарий защиты работает в любой день:
+Даты считаются от дня запуска, поэтому данные одинаково показательны в любой день:
 
 | Платёж | Валюта | Что показывает |
 |---|---|---|
@@ -103,7 +102,7 @@ flowchart LR
 - **Сессии — серверные** (непрозрачный токен в HttpOnly-cookie, в базе только хеш): выход и удаление пользователя сразу закрывают доступ.
 - **Доменная логика отделена от фреймворков:** расчёт сроков и просрочки (`app/domain`) покрыт модульными тестами.
 
-Подробнее — [`TASK_PLAN.md`](TASK_PLAN.md).
+Подробнее — [`ARCHITECTURE.md`](ARCHITECTURE.md): модель данных, бизнес-правила, API, каналы уведомлений, принятые решения.
 
 ## Telegram
 
@@ -159,6 +158,6 @@ backend/              API, worker и бот (Python)
 frontend/             веб-панель (React); работает и на имитации API — см. frontend/README.md
 e2e/                  сквозные тесты в браузере (Playwright)
 deploy/               nginx для сервера
-docs/                 openapi.yaml, сценарий защиты, развёртывание на VPS
+docs/                 openapi.yaml, развёртывание на VPS
 docker-compose.yml    запуск всего одной командой
 ```

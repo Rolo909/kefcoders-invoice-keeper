@@ -1,5 +1,5 @@
 """Напоминания: критерий приёмки «Минимум за 3 дня, без дублей; оплаченный период — без напоминания;
-удалённый платёж не напоминает» (TASK_PLAN §4.5)."""
+удалённый платёж не напоминает» (ARCHITECTURE.md §4.5)."""
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal

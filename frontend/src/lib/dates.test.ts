@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays, datesInRange, diffDays, dueDate, monthRange, shiftMonth } from './dates';
 
-describe('dueDate — от якоря, нет числа → последний день (TASK_PLAN §4.1)', () => {
+describe('dueDate — от якоря, нет числа → последний день (ARCHITECTURE.md §4.1)', () => {
   it('31 января идёт 28/29 февраля, 31 марта, 30 апреля', () => {
     expect([0, 1, 2, 3].map((n) => dueDate('2026-01-31', 'monthly', n))).toEqual(['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
     expect(dueDate('2028-01-31', 'monthly', 1)).toBe('2028-02-29');

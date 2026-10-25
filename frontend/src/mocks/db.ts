@@ -52,7 +52,7 @@ export const uid = () => crypto.randomUUID();
 export const at = (d: ISODate, hhmm = '09:00') => `${d}T${hhmm}:00+03:00`;
 export const nowIso = () => new Date().toISOString();
 
-// ---------- domain (TASK_PLAN §4) ----------
+// ---------- domain (ARCHITECTURE.md §4) ----------
 
 export function stateOf(o: DbOccurrence, t: ISODate): OccurrenceState {
   if (o.status === 'paid' && o.paid_date) return o.paid_date > o.due_date ? 'paid_late' : 'paid';
@@ -180,7 +180,7 @@ export function reset() {
   }
 }
 
-// ---------- seed (TASK_PLAN §12, dates relative to today) ----------
+// ---------- seed (ARCHITECTURE.md §12, dates relative to today) ----------
 
 function seed(): Db {
   const T = today();
